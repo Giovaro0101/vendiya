@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Reportes{% endblock %}
+{% block content %}
+<h2>Reportes</h2>
+
+<div class="row mb-3">
+  <div class="col-md-4">
+    <div class="card bg-primary text-white">
+      <div class="card-body">
+        <h6>Ventas de hoy</h6>
+        <h2>{{ ventas_hoy.num }}</h2>
+        <p class="mb-0">Total: ${{ '%.2f'|format(ventas_hoy.total) }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><b>Top 10 productos más vendidos</b></div>
+      <div class="card-body">
+        <table class="table table-sm">
+          <thead><tr><th>Producto</th><th>Cantidad</th><th>Total $</th></tr></thead>
+          <tbody>
+            {% for p in top_productos %}
+            <tr><td>{{ p.nombre }}</td><td>{{ p.cantidad }}</td>
+                <td>${{ '%.2f'|format(p.total) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header bg-warning"><b>⚠ Stock bajo mínimo</b></div>
+      <div class="card-body">
+        <table class="table table-sm">
+          <thead><tr><th>Producto</th><th>Stock</th><th>Mínimo</th></tr></thead>
+          <tbody>
+            {% for p in stock_bajo %}
+            <tr><td>{{ p.nombre }}</td><td class="text-danger">{{ p.stock_actual }}</td>
+                <td>{{ p.stock_minimo }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

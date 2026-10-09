@@ -1,0 +1,62 @@
+@'
+{% extends "base.html" %}
+{% block title %}Inventario{% endblock %}
+{% block content %}
+<h2>Inventario / Ajustes</h2>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('ajuste_inventario') }}" class="row g-2">
+      <div class="col-md-4">
+        <select name="producto_id" class="form-select" required>
+          <option value="">-- Selecciona producto --</option>
+          {% for p in productos %}
+            <option value="{{ p.id }}">{{ p.nombre }} (stock: {{ p.stock_actual }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="tipo" class="form-select">
+          <option value="entrada">Entrada</option>
+          <option value="salida">Salida / merma</option>
+          <option value="ajuste">Ajuste (nuevo stock)</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <input name="cantidad" type="number" step="0.01" class="form-control"
+               placeholder="Cantidad" required>
+      </div>
+      <div class="col-md-3">
+        <input name="motivo" class="form-control" placeholder="Motivo (opcional)">
+      </div>
+      <div class="col-md-1">
+        <button class="btn btn-success w-100">OK</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<table class="table table-hover bg-white">
+  <thead class="table-dark">
+    <tr><th>Producto</th><th>Categoría</th><th>Stock</th><th>Mínimo</th><th>Estado</th></tr>
+  </thead>
+  <tbody>
+    {% for p in productos %}
+    <tr>
+      <td>{{ p.nombre }}</td>
+      <td>{{ p.categoria or '-' }}</td>
+      <td>{{ p.stock_actual }}</td>
+      <td>{{ p.stock_minimo }}</td>
+      <td>
+        {% if p.stock_actual <= p.stock_minimo %}
+          <span class="badge bg-danger">⚠ Bajo</span>
+        {% else %}
+          <span class="badge bg-success">OK</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+'@ | Out-File -Encoding utf8 templates\inventario.html

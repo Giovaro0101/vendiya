@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+{% block title %}POS{% endblock %}
+{% block content %}
+
+<!-- Esquina: tasa de cambio BCV -->
+<div class="row mb-2">
+  <div class="col-12 text-end">
+    <span class="badge bg-success fs-6">
+      💱 Tasa oficial: 1 USD = {{ '%.2f'|format(tasa_bcv or 0) }} Bs.
+    </span>
+  </div>
+</div>
+
+<div class="row">
+  <!-- Panel izquierdo: búsqueda y productos -->
+  <div class="col-md-7">
+    <div class="card mb-3">
+      <div class="card-body">
+        <input type="text" id="buscar" class="form-control form-control-lg"
+               placeholder="🔍 Escanea código o escribe nombre..." autofocus>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body" style="max-height:70vh; overflow-y:auto">
+        <div id="resultados" class="row g-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel derecho: carrito -->
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-cart"></i> Carrito</h5>
+      </div>
+      <div class="card-body">
+        <table class="table table-sm" id="tabla-carrito">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Cant</th>
+              <th>Subtotal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <hr>
+        <div class="d-flex justify-content-between">
+          <b>Subtotal:</b>
+          <span><span id="subtotal">$0.00</span> <small class="text-muted">(<span id="subtotal_bs">0.00</span> Bs)</small></span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <b>IVA:</b>
+          <span><span id="iva">$0.00</span> <small class="text-muted">(<span id="iva_bs">0.00</span> Bs)</small></span>
+        </div>
+        <h4 class="d-flex justify-content-between mt-2">
+          <b>TOTAL:</b>
+          <span>
+            <span id="total">$0.00</span>
+            <small class="text-muted fs-6">(<span id="total_bs">0.00</span> Bs)</small>
+          </span>
+        </h4>
+        <hr>
+
+        <!-- Métodos de pago -->
+        <div class="mb-2">
+          <label class="form-label"><b>Método de pago:</b></label>
+          <select id="metodo_pago" class="form-select">
+            <option value="efectivo_bs">💴 Efectivo (Bs)</option>
+            <option value="pago_movil">📱 Pago móvil (Bs)</option>
+            <option value="divisas">💲 Divisas ($)</option>
+            <option value="binance">🪙 Binance ($)</option>
+            <option value="tarjeta">💳 Tarjeta</option>
+            <option value="mixto">🔀 Mixto (varios métodos)</option>
+          </select>
+        </div>
+
+        <!-- Moneda del monto recibido -->
+        <div id="div_simple">
+          <label>Monto recibido:</label>
+          <div class="input-group">
+            <input type="number" id="monto_recibido" class="form-control" step="0.01" value="0">
+            <select id="moneda_monto" class="form-select" style="max-width:90px">
+              <option value="USD">$</option>
+              <option value="BS">Bs</option>
+            </select>
+          </div>
+          <div class="d-flex justify-content-between mt-2">
+            <b>Cambio:</b>
+            <span>
+              <span id="cambio">$0.00</span>
+              <small class="text-muted">(<span id="cambio_bs">0.00</span> Bs)</small>
+            </span>
+          </div>
+        </div>
+
+        <!-- Panel de pago mixto -->
+        <div id="div_mixto" style="display:none">
+          <label class="mb-2"><b>Desglose de pagos:</b></label>
+          <div id="lista_pagos"></div>
+          <button class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="agregarPagoMixto()">
+            + Agregar método
+          </button>
+          <hr>
+          <div class="d-flex justify-content-between"><b>Suma de pagos:</b>
+            <span>$<span id="suma_pagos">0.00</span></span></div>
+          <div class="d-flex justify-content-between"><b>Faltante:</b>
+            <span>$<span id="faltante">0.00</span></span></div>
+          <div class="d-flex justify-content-between"><b>Cambio:</b>
+            <span>$<span id="cambio_mixto">0.00</span></span></div>
+        </div>
+
+        <button class="btn btn-success btn-lg w-100 mt-3" onclick="cobrar()">
+          <i class="bi bi-cash-coin"></i> COBRAR
+        </button>
+        <button class="btn btn-outline-danger w-100 mt-1" onclick="vaciarCarrito()">Vaciar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ TASA BCV ============
+const TASA_BCV = {{ tasa_bcv or 0 }};
+const fmtUSD = (n) => '$' + n.toFixed(2);
+const fmtBS  = (n) => n.toFixed(2) + ' Bs';
+const aBs    = (usd) => usd * TASA_BCV;
+
+// ============ ESTADO ============
+let carrito = [];
+let pagosMixtos = [];
+
+// ============ BÚSQUEDA ============
+const inputBuscar = document.getElementById('buscar');
+inputBuscar.addEventListener('input', async (e) => {
+    const q = e.target.value.trim();
+    const res = await fetch(`/api/productos/buscar?q=${encodeURIComponent(q)}`);
+    const productos = await res.json();
+    const cont = document.getElementById('resultados');
+    cont.innerHTML = '';
+    productos.forEach(p => {
+        const col = document.createElement('div');
+        col.className = 'col-md-6';
+        col.innerHTML = `
+          <div class="border rounded p-2 h-100" style="cursor:pointer"
+               onclick='agregarAlCarrito(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+            <b>${p.nombre}</b><br>
+            <small>${fmtUSD(p.precio_venta)} | ${fmtBS(aBs(p.precio_venta))}</small><br>
+            <small class="text-muted">Stock: ${p.stock_actual}</small>
+          </div>`;
+        cont.appendChild(col);
+    });
+});
+
+inputBuscar.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const q = e.target.value.trim();
+        if (!q) return;
+        fetch(`/api/productos/buscar?q=${encodeURIComponent(q)}`)
+          .then(r => r.json())
+          .then(lista => {
+            if (lista.length === 1) {
+              agregarAlCarrito(lista[0]);
+              inputBuscar.value = '';
+              document.getElementById('resultados').innerHTML = '';
+            }
+          });
+    }
+});
+
+// ============ CARRITO ============
+function agregarAlCarrito(prod) {
+    const item = carrito.find(i => i.producto_id === prod.id);
+    if (item) {
+        if (item.cantidad + 1 > prod.stock_actual) {
+            alert('Stock insuficiente');
+            return;
+        }
+        item.cantidad++;
+    } else {
+        carrito.push({
+            producto_id: prod.id,
+            nombre: prod.nombre,
+            precio: prod.precio_venta,
+            iva: prod.iva,
+            cantidad: 1
+        });
+    }
+    renderCarrito();
+}
+
+function renderCarrito() {
+    const tbody = document.querySelector('#tabla-carrito tbody');
+    tbody.innerHTML = '';
+    let subtotal = 0, iva = 0;
+    carrito.forEach((item, idx) => {
+        const sub = item.precio * item.cantidad;
+        const ivaItem = sub * (item.iva / 100);
+        subtotal += sub;
+        iva += ivaItem;
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              ${item.nombre}<br>
+              <small class="text-muted">${fmtUSD(item.precio)} c/u</small>
+            </td>
+            <td><input type="number" min="1" value="${item.cantidad}" style="width:60px"
+                       onchange="cambiarCantidad(${idx}, this.value)"></td>
+            <td>
+              ${fmtUSD(sub)}<br>
+              <small class="text-muted">${fmtBS(aBs(sub))}</small>
+            </td>
+            <td><button class="btn btn-sm btn-danger" onclick="quitar(${idx})">×</button></td>
+          </tr>`;
+    });
+    const total = subtotal + iva;
+
+    document.getElementById('subtotal').textContent = fmtUSD(subtotal);
+    document.getElementById('subtotal_bs').textContent = aBs(subtotal).toFixed(2);
+
+    document.getElementById('iva').textContent = fmtUSD(iva);
+    document.getElementById('iva_bs').textContent = aBs(iva).toFixed(2);
+
+    document.getElementById('total').textContent = fmtUSD(total);
+    document.getElementById('total_bs').textContent = aBs(total).toFixed(2);
+
+    calcularCambio();
+    calcularMixto();
+}
+
+function cambiarCantidad(idx, val) {
+    carrito[idx].cantidad = parseFloat(val) || 1;
+    renderCarrito();
+}
+
+function quitar(idx) {
+    carrito.splice(idx, 1);
+    renderCarrito();
+}
+
+function vaciarCarrito() {
+    carrito = [];
+    pagosMixtos = [];
+    renderCarrito();
+    renderPagosMixtos();
+}
+
+// ============ CÁLCULOS DE PAGO ============
+function obtenerTotalUSD() {
+    return parseFloat(document.getElementById('total').textContent.replace('$','')) || 0;
+}
+
+function calcularCambio() {
+    const total = obtenerTotalUSD();
+    const montoInput = parseFloat(document.getElementById('monto_recibido').value) || 0;
+    const moneda = document.getElementById('moneda_monto').value;
+
+    // Convertir el monto a USD si el usuario ingresó Bs
+    const montoUSD = (moneda === 'BS') ? (montoInput / TASA_BCV) : montoInput;
+    const cambioUSD = montoUSD - total;
+
+    document.getElementById('cambio').textContent = fmtUSD(cambioUSD > 0 ? cambioUSD : 0);
+    document.getElementById('cambio_bs').textContent = aBs(cambioUSD > 0 ? cambioUSD : 0).toFixed(2);
+}
+
+document.getElementById('monto_recibido').addEventListener('input', calcularCambio);
+document.getElementById('moneda_monto').addEventListener('change', calcularCambio);
+
+// ============ PAGO MIXTO ============
+function agregarPagoMixto() {
+    pagosMixtos.push({ metodo: 'efectivo', monto: 0, moneda: 'USD' });
+    renderPagosMixtos();
+}
+
+function renderPagosMixtos() {
+    const cont = document.getElementById('lista_pagos');
+    cont.innerHTML = '';
+    pagosMixtos.forEach((p, idx) => {
+        cont.innerHTML += `
+          <div class="input-group input-group-sm mb-1">
+            <select class="form-select" onchange="cambiarMetodoMixto(${idx}, this.value)">
+              <option value="efectivo" ${p.metodo==='efectivo'?'selected':''}>💵 Efectivo</option>
+              <option value="pago_movil" ${p.metodo==='pago_movil'?'selected':''}>📱 Pago móvil</option>
+              <option value="divisas" ${p.metodo==='divisas'?'selected':''}>💲 Divisas</option>
+              <option value="binance" ${p.metodo==='binance'?'selected':''}>🪙 Binance</option>
+              <option value="tarjeta" ${p.metodo==='tarjeta'?'selected':''}>💳 Tarjeta</option>
+            </select>
+            <input type="number" step="0.01" class="form-control"
+                   value="${p.monto}" onchange="cambiarMontoMixto(${idx}, this.value)">
+            <select class="form-select" style="max-width:75px"
+                    onchange="cambiarMonedaMixto(${idx}, this.value)">
+              <option value="USD" ${p.moneda==='USD'?'selected':''}>$</option>
+              <option value="BS"  ${p.moneda==='BS'?'selected':''}>Bs</option>
+            </select>
+            <button class="btn btn-danger" onclick="quitarPagoMixto(${idx})">×</button>
+          </div>`;
+    });
+    calcularMixto();
+}
+
+function cambiarMetodoMixto(idx, val) { pagosMixtos[idx].metodo = val; }
+function cambiarMonedaMixto(idx, val) {
+    pagosMixtos[idx].moneda = val;
+    renderPagosMixtos();
+}
+function cambiarMontoMixto(idx, val) {
+    pagosMixtos[idx].monto = parseFloat(val) || 0;
+    calcularMixto();
+}
+function quitarPagoMixto(idx) { pagosMixtos.splice(idx, 1); renderPagosMixtos(); }
+
+function calcularMixto() {
+    const total = obtenerTotalUSD();
+    const suma = pagosMixtos.reduce((a, p) => {
+        const m = p.monto || 0;
+        return a + (p.moneda === 'BS' ? (m / TASA_BCV) : m);
+    }, 0);
+    const faltante = total - suma;
+    const cambio = suma - total;
+    document.getElementById('suma_pagos').textContent = suma.toFixed(2);
+    document.getElementById('faltante').textContent = (faltante > 0 ? faltante : 0).toFixed(2);
+    document.getElementById('cambio_mixto').textContent = (cambio > 0 ? cambio : 0).toFixed(2);
+}
+
+// ============ CAMBIO DE MÉTODO ============
+document.getElementById('metodo_pago').addEventListener('change', (e) => {
+    const m = e.target.value;
+    const esMixto = m === 'mixto';
+    document.getElementById('div_simple').style.display = esMixto ? 'none' : 'block';
+    document.getElementById('div_mixto').style.display = esMixto ? 'block' : 'none';
+
+    // Auto-ajustar la moneda del monto según el método
+    if (!esMixto) {
+        const monedaSel = document.getElementById('moneda_monto');
+        if (m === 'pago_movil') {
+            monedaSel.value = 'BS';
+        } else if (m === 'divisas' || m === 'binance') {
+            monedaSel.value = 'USD';
+        }
+        calcularCambio();
+    }
+
+    if (esMixto && pagosMixtos.length === 0) {
+        agregarPagoMixto();
+    }
+});
+
+// ============ COBRAR ============
+async function cobrar() {
+    if (carrito.length === 0) { alert('Carrito vacío'); return; }
+
+    const metodo = document.getElementById('metodo_pago').value;
+    const totalUSD = obtenerTotalUSD();
+    let pagos = [];
+
+    if (metodo === 'mixto') {
+        if (pagosMixtos.length === 0) { alert('Agrega al menos un método de pago'); return; }
+        const suma = pagosMixtos.reduce((a, p) => {
+            const m = p.monto || 0;
+            return a + (p.moneda === 'BS' ? (m / TASA_BCV) : m);
+        }, 0);
+        if (suma < totalUSD - 0.01) {
+            alert(`Los pagos ($${suma.toFixed(2)}) no cubren el total ($${totalUSD.toFixed(2)})`);
+            return;
+        }
+        // Normalizar todos los montos a USD para guardarlos
+        pagos = pagosMixtos.map(p => ({
+            metodo: p.metodo,
+            monto: (p.moneda === 'BS') ? (p.monto / TASA_BCV) : p.monto
+        }));
+    } else {
+        const monto = parseFloat(document.getElementById('monto_recibido').value) || 0;
+        const moneda = document.getElementById('moneda_monto').value;
+        const montoUSD = (moneda === 'BS') ? (monto / TASA_BCV) : monto;
+
+        if (montoUSD < totalUSD - 0.01) {
+            alert('Monto recibido insuficiente');
+            return;
+        }
+        pagos = [{ metodo: metodo, monto: montoUSD }];
+    }
+
+    const res = await fetch('/api/venta', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            items: carrito.map(i => ({producto_id: i.producto_id, cantidad: i.cantidad})),
+            pagos: pagos
+        })
+    });
+    const data = await res.json();
+    if (data.ok) {
+        alert(
+            `✅ Venta ${data.numero_factura}\n` +
+            `Total: ${fmtUSD(data.total)} (${fmtBS(aBs(data.total))})\n` +
+            `Ganancia: ${fmtUSD(data.ganancia)}\n` +
+            `Cambio: ${fmtUSD(data.cambio)} (${fmtBS(aBs(data.cambio))})`
+        );
+        vaciarCarrito();
+        document.getElementById('monto_recibido').value = 0;
+        document.getElementById('metodo_pago').value = 'efectivo';
+        document.getElementById('moneda_monto').value = 'USD';
+        document.getElementById('div_simple').style.display = 'block';
+        document.getElementById('div_mixto').style.display = 'none';
+        document.getElementById('buscar').focus();
+    } else {
+        alert('❌ Error: ' + data.error);
+    }
+}
+</script>
+{% endblock %}

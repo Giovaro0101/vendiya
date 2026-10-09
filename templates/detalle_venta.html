@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Venta{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <h4>Factura {{ venta.numero_factura }}</h4>
+    <p>Fecha: {{ venta.fecha }} | Pago: {{ venta.forma_pago }}</p>
+    <table class="table">
+      <thead><tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Subtotal</th><th>Ganancia</th></tr></thead>
+      <tbody>
+        {% for d in detalle %}
+        <tr><td>{{ d.nombre }}</td><td>{{ d.cantidad }}</td>
+            <td>${{ '%.2f'|format(d.precio_unitario) }}</td>
+            <td>${{ '%.2f'|format(d.subtotal) }}</td>
+            <td class="text-success">${{ '%.2f'|format(d.ganancia or 0) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="text-end">
+      <p>Subtotal: ${{ '%.2f'|format(venta.subtotal) }}</p>
+      <p>IVA: ${{ '%.2f'|format(venta.iva) }}</p>
+      <h4>Total: ${{ '%.2f'|format(venta.total) }}</h4>
+      <h5 class="text-success">Ganancia: ${{ '%.2f'|format(venta.ganancia or 0) }}</h5>
+      {% if venta.forma_pago == 'efectivo' %}
+        <p>Recibido: ${{ '%.2f'|format(venta.monto_recibido) }} | Cambio: ${{ '%.2f'|format(venta.cambio) }}</p>
+      {% endif %}
+    </div>
+
+    <hr>
+    <h5>Pagos:</h5>
+    <ul>
+      {% for p in pagos %}
+        <li>{{ p.metodo }}: ${{ '%.2f'|format(p.monto) }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

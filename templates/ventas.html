@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Ventas{% endblock %}
+{% block content %}
+<h2>Historial de ventas</h2>
+
+<div class="row mb-3">
+  <div class="col-md-6">
+    <div class="card bg-info text-white">
+      <div class="card-body">
+        <h6>Total facturado</h6>
+        <h3>${{ '%.2f'|format(totales.total or 0) }}</h3>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card bg-success text-white">
+      <div class="card-body">
+        <h6>Ganancia total</h6>
+        <h3>${{ '%.2f'|format(totales.ganancia or 0) }}</h3>
+      </div>
+    </div>
+  </div>
+</div>
+
+<table class="table table-hover bg-white">
+  <thead class="table-dark">
+    <tr>
+      <th>Factura</th>
+      <th>Fecha</th>
+      <th>Usuario</th>
+      <th>Subtotal</th>
+      <th>IVA</th>
+      <th>Total</th>
+      <th>Ganancia</th>
+      <th>Pago</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in ventas %}
+    <tr>
+      <td>{{ v.numero_factura }}</td>
+      <td>{{ v.fecha }}</td>
+      <td>{{ v.usuario or '-' }}</td>
+      <td>${{ '%.2f'|format(v.subtotal) }}</td>
+      <td>${{ '%.2f'|format(v.iva) }}</td>
+      <td><b>${{ '%.2f'|format(v.total) }}</b></td>
+      <td class="text-success"><b>${{ '%.2f'|format(v.ganancia or 0) }}</b></td>
+      <td>{{ v.forma_pago }}</td>
+      <td><a class="btn btn-sm btn-info" href="{{ url_for('ver_venta', vid=v.id) }}">Ver</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
