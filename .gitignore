@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.secret_key
+vendiya.log*
+backups/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

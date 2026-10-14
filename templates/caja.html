@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - Caja{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Caja</h1>
+    <p>Abre tu turno con el efectivo inicial y ciérralo para cuadrar lo que debería haber en la gaveta.</p>
+  </div>
+</div>
+
+{% if abierta %}
+<div class="alert alert-success d-flex align-items-center gap-2">
+  <i class="bi bi-unlock"></i>
+  Caja abierta desde <b>{{ abierta.fecha_apertura }}</b> con un fondo de <b>${{ '%.2f'|format(abierta.fondo_inicial) }}</b>.
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    {% include 'partials/resumen_caja.html' %}
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title-sm">Cerrar caja</h2></div>
+      <div class="card-body">
+        <div class="stat-label">Efectivo que debería haber</div>
+        <div class="stat-value mb-3">${{ '%.2f'|format(resumen.esperado) }}</div>
+        <form method="POST" action="{{ url_for('cerrar_caja') }}"
+              data-confirm="Se cerrará el turno y se guardará el cuadre. Después las ventas nuevas irán a una caja nueva."
+              data-confirm-titulo="¿Cerrar la caja?" data-confirm-ok="Cerrar caja">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label">Efectivo contado ($)</label>
+          <input name="efectivo_contado" type="number" step="0.01" min="0" class="form-control form-control-lg mb-3" required placeholder="0.00">
+          <label class="form-label">Notas (opcional)</label>
+          <input name="notas" class="form-control mb-3" maxlength="300">
+          <button class="btn btn-primary w-100" type="submit">Cerrar caja</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="row g-4 mb-4">
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title-sm">Abrir caja</h2></div>
+      <div class="card-body">
+        <p class="text-muted">No hay una caja abierta. Las ventas se registran igual, pero no quedan asociadas a ningún turno.</p>
+        <form method="POST" action="{{ url_for('abrir_caja') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label">Efectivo inicial en gaveta ($)</label>
+          <input name="fondo_inicial" type="number" step="0.01" min="0" value="0" class="form-control form-control-lg mb-3" required>
+          <button class="btn btn-primary w-100" type="submit">Abrir caja</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<h2 class="h6 text-muted text-uppercase mt-4 mb-2" style="letter-spacing:.05em">Cierres anteriores</h2>
+<div class="table-card">
+<div class="table-responsive">
+<table class="table table-hover">
+  <thead>
+    <tr><th>Apertura</th><th>Cierre</th><th>Cajero</th><th class="text-end">Ventas</th>
+        <th class="text-end">Esperado</th><th class="text-end">Contado</th><th class="text-end">Diferencia</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for c in historial %}
+    <tr>
+      <td class="text-muted num">{{ c.fecha_apertura }}</td>
+      <td class="text-muted num">{{ c.fecha_cierre }}</td>
+      <td class="text-muted">{{ c.usuario or '—' }}</td>
+      <td class="text-end num">${{ '%.2f'|format(c.total_ventas or 0) }}</td>
+      <td class="text-end num">${{ '%.2f'|format(c.efectivo_esperado or 0) }}</td>
+      <td class="text-end num">${{ '%.2f'|format(c.efectivo_contado or 0) }}</td>
+      <td class="text-end num">
+        {% if c.diferencia is not none and c.diferencia|abs < 0.005 %}<span class="badge bg-success">Cuadra</span>
+        {% elif c.diferencia is not none and c.diferencia > 0 %}<span class="badge bg-warning">Sobra ${{ '%.2f'|format(c.diferencia) }}</span>
+        {% elif c.diferencia is not none %}<span class="badge bg-danger">Falta ${{ '%.2f'|format(-c.diferencia) }}</span>{% endif %}
+      </td>
+      <td class="text-end"><a class="btn btn-sm btn-light" href="{{ url_for('caja_detalle', cid=c.id) }}">Ver</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="empty">Aún no hay cierres de caja.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}

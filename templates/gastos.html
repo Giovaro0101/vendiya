@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - Gastos{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Gastos</h1>
+    <p>Anota lo que gastas en el negocio para conocer tu ganancia real.</p>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title-sm">Registrar gasto</h2></div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('guardar_gasto') }}" class="row g-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-12"><label class="form-label">Concepto</label>
+            <input name="concepto" class="form-control" required maxlength="120" placeholder="Ej.: pago de luz, flete de mercancía"></div>
+          <div class="col-6"><label class="form-label">Monto ($)</label>
+            <input name="monto" type="number" step="0.01" min="0.01" class="form-control" required></div>
+          <div class="col-6"><label class="form-label">Categoría</label>
+            <select name="categoria" class="form-select">
+              {% for c in categorias %}<option>{{ c }}</option>{% endfor %}
+            </select></div>
+          <div class="col-12">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="pagado_de_caja" value="1" id="de_caja" {{ '' if caja_abierta else 'disabled' }}>
+              <label class="form-check-label" for="de_caja">Se pagó con efectivo de la caja{% if not caja_abierta %} <span class="text-muted">(no hay caja abierta)</span>{% endif %}</label>
+            </div>
+          </div>
+          <div class="col-12 d-grid"><button class="btn btn-primary" type="submit">Registrar gasto</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="card-title-sm">Resumen</h2>
+        <form method="GET" class="filtros m-0">
+          <input type="date" name="desde" value="{{ r.desde }}" class="form-control form-control-sm" aria-label="Desde">
+          <input type="date" name="hasta" value="{{ r.hasta }}" class="form-control form-control-sm" aria-label="Hasta">
+          <button class="btn btn-sm btn-light" type="submit">Ver</button>
+        </form>
+      </div>
+      <div class="card-body">
+        <div class="stat-label">Total en el período</div>
+        <div class="stat-value mb-3">${{ '%.2f'|format(total) }}</div>
+        {% for c in por_categoria %}
+          <div class="fila-barra">
+            <span>{{ c.categoria }}</span>
+            <div class="barra-h"><div style="width:{{ (c.total / total * 100)|round|int if total else 0 }}%"></div></div>
+            <span class="num">${{ '%.2f'|format(c.total) }}</span>
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">Sin gastos en este período.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="table-card">
+<div class="table-responsive">
+<table class="table table-hover">
+  <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Registró</th><th class="text-end">Monto</th><th></th></tr></thead>
+  <tbody>
+    {% for g in gastos %}
+    <tr>
+      <td class="text-muted num">{{ g.fecha }}</td>
+      <td class="fw-medium">{{ g.concepto }}{% if g.pagado_de_caja %} <span class="badge pill-neutral">de caja</span>{% endif %}</td>
+      <td class="text-muted">{{ g.categoria or '—' }}</td>
+      <td class="text-muted">{{ g.usuario or '—' }}</td>
+      <td class="text-end num">${{ '%.2f'|format(g.monto) }}</td>
+      <td class="text-end">
+        <form method="POST" action="{{ url_for('eliminar_gasto', gid=g.id) }}" class="d-inline"
+              data-confirm="Se eliminará «{{ g.concepto }}» (${{ '%.2f'|format(g.monto) }})." data-confirm-ok="Eliminar">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn-icon danger" title="Eliminar" type="submit"><i class="bi bi-trash3"></i></button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty">No hay gastos registrados en este período.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}

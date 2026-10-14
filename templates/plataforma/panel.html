@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - Plataforma{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Plataforma</h1>
+    <p>Negocios clientes de VendiYA · {{ session.superadmin_nombre }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNegocio"><i class="bi bi-plus-lg"></i> Nuevo negocio</button>
+    <form method="POST" action="{{ url_for('plataforma_logout') }}" class="m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-light" type="submit"><i class="bi bi-box-arrow-right"></i> Salir</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Negocios</div><div class="stat-value">{{ resumen.total }}</div>
+    <div class="stat-meta"><b>{{ resumen.activos }}</b> activos</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Por vencer (7 días)</div>
+    <div class="stat-value {{ 'text-danger' if resumen.por_vencer }}">{{ resumen.por_vencer }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Vencidos</div><div class="stat-value">{{ resumen.vencidos }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Suspendidos</div><div class="stat-value">{{ resumen.suspendidos }}</div>
+    <div class="stat-meta">{% if tasa %}Tasa global: <b>{{ '%.2f'|format(tasa.valor) }} Bs</b> ({{ tasa.fecha }}){% else %}Sin tasa global aún{% endif %}</div></div></div>
+</div>
+
+<div class="d-flex gap-2 flex-wrap align-items-center mb-3">
+  <div class="search" style="min-width:260px;flex:1;max-width:420px">
+    <i class="bi bi-search"></i>
+    <input type="text" id="filtro" class="form-control" placeholder="Buscar negocio o código" autocomplete="off">
+  </div>
+  <select id="filtro_estado" class="form-select" style="width:auto">
+    <option value="">Todos los estados</option>
+    <option value="activo">Activos</option><option value="vencido">Vencidos</option><option value="suspendido">Suspendidos</option>
+  </select>
+  <span class="text-muted small ms-auto">Registro público: <b>{{ 'activado' if registro_publico else 'desactivado' }}</b></span>
+</div>
+
+<div class="table-card mb-4">
+<div class="table-responsive">
+<table class="table table-hover" id="tabla">
+  <thead><tr><th>Negocio</th><th>Estado</th><th>Plan</th><th>Vence</th><th>Último acceso</th><th></th></tr></thead>
+  <tbody>
+    {% for n in negocios %}
+    <tr data-texto="{{ (n.nombre ~ ' ' ~ n.slug ~ ' ' ~ (n.email or ''))|lower }}" data-estado="{{ n.estado }}">
+      <td><span class="fw-medium">{{ n.nombre }}</span><br><small class="text-muted">{{ n.slug }}</small></td>
+      <td>
+        {% if n.estado == 'activo' %}<span class="badge bg-success">Activo</span>
+        {% elif n.estado == 'vencido' %}<span class="badge bg-danger">Vencido</span>
+        {% else %}<span class="badge bg-warning">Suspendido</span>{% endif %}
+      </td>
+      <td class="text-muted">{{ n.plan }}</td>
+      <td class="num">
+        {% if n.vence %}{{ n.vence }}
+          {% if n.dias_restantes is not none and 0 <= n.dias_restantes <= 7 %}<span class="badge bg-warning">{{ n.dias_restantes }} d</span>{% endif %}
+        {% else %}<span class="text-muted">sin límite</span>{% endif %}
+      </td>
+      <td class="text-muted num">{{ n.ultimo_acceso or '—' }}</td>
+      <td class="text-end"><a class="btn btn-sm btn-light" href="{{ url_for('plataforma_negocio', nid=n.id) }}">Administrar</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty">Aún no hay negocios. Crea el primero con «Nuevo negocio».</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+
+<h2 class="h6 text-muted text-uppercase mb-2" style="letter-spacing:.05em">Actividad reciente</h2>
+<div class="table-card">
+<div class="table-responsive">
+<table class="table table-sm">
+  <tbody>
+    {% for e in eventos %}
+    <tr><td class="text-muted num" style="width:170px">{{ e.fecha }}</td><td style="width:150px">{{ e.slug or '—' }}</td>
+        <td>{{ e.tipo }}</td><td class="text-muted">{{ e.detalle or '' }}</td><td class="text-muted">{{ e.actor or '' }}</td></tr>
+    {% else %}
+    <tr><td class="empty">Sin actividad todavía.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+
+<div class="modal fade" id="modalNegocio" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="POST" action="{{ url_for('plataforma_crear') }}" class="modal-content" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo negocio</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-sm-7 mb-3"><label>Nombre del negocio</label><input name="nombre" id="nn_nombre" class="form-control" required maxlength="80"></div>
+          <div class="col-sm-5 mb-3"><label>Código de acceso</label><input name="codigo" id="nn_codigo" class="form-control" maxlength="30" placeholder="automático" autocapitalize="none"></div>
+        </div>
+        <div class="row">
+          <div class="col-sm-6 mb-3"><label>Nombre del dueño</label><input name="dueno" class="form-control" maxlength="60"></div>
+          <div class="col-sm-6 mb-3"><label>Usuario del dueño</label><input name="usuario" class="form-control" required maxlength="30" value="admin" autocapitalize="none"></div>
+        </div>
+        <div class="mb-3"><label>Contraseña inicial</label><input name="password" type="text" class="form-control" required minlength="6" autocomplete="off">
+          <div class="form-text">Se la entregas al cliente; puede cambiarla desde «Mi cuenta».</div></div>
+        <div class="row">
+          <div class="col-sm-6 mb-3"><label>Correo</label><input name="email" type="email" class="form-control" maxlength="120"></div>
+          <div class="col-sm-6 mb-3"><label>Teléfono</label><input name="telefono" class="form-control" maxlength="30"></div>
+        </div>
+        <div class="row">
+          <div class="col-4"><label>Plan</label>
+            <select name="plan" class="form-select">{% for p in planes %}<option>{{ p }}</option>{% endfor %}</select></div>
+          <div class="col-4"><label>Días</label><input name="dias" type="number" min="0" max="3650" value="{{ dias_prueba }}" class="form-control"></div>
+          <div class="col-4"><label>Usuarios</label><input name="max_usuarios" type="number" min="1" max="1000" value="3" class="form-control"></div>
+        </div>
+        <div class="form-text">Días 0 = sin vencimiento.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" type="submit">Crear negocio</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function filtrar() {
+    const t = document.getElementById('filtro').value.trim().toLowerCase();
+    const e = document.getElementById('filtro_estado').value;
+    document.querySelectorAll('#tabla tbody tr[data-texto]').forEach(tr => {
+        tr.style.display = (!t || tr.dataset.texto.includes(t)) && (!e || tr.dataset.estado === e) ? '' : 'none';
+    });
+}
+document.getElementById('filtro').addEventListener('input', filtrar);
+document.getElementById('filtro_estado').addEventListener('change', filtrar);
+</script>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - Usuarios{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Usuarios</h1>
+    <p>Crea cuentas para tus empleados. Los cajeros solo ven Vender, Clientes, Caja y las ventas de hoy (sin ganancias). <b>{{ cupo.activos }} de {{ cupo.tope }}</b> usuarios activos en tu plan.</p>
+  </div>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalUsuario"><i class="bi bi-person-plus"></i> Nuevo usuario</button>
+</div>
+
+<div class="table-card">
+<div class="table-responsive">
+<table class="table table-hover">
+  <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+  <tbody>
+    {% for u in usuarios %}
+    <tr class="{{ 'fila-inactiva' if u.activo == 0 }}">
+      <td class="fw-medium">{{ u.nombre }}{% if u.id == session.usuario_id %} <span class="badge pill-neutral">tú</span>{% endif %}</td>
+      <td class="text-muted">{{ u.usuario }}</td>
+      <td>{{ 'Administrador' if u.rol == 'admin' else 'Cajero' }}</td>
+      <td>{% if u.activo == 0 %}<span class="badge bg-danger">Desactivado</span>{% else %}<span class="badge bg-success">Activo</span>{% endif %}</td>
+      <td class="text-end text-nowrap">
+        <button class="btn btn-sm btn-light btn-clave" type="button" data-id="{{ u.id }}" data-nombre="{{ u.nombre }}">Cambiar clave</button>
+        {% if u.id != session.usuario_id %}
+        <form method="POST" action="{{ url_for('estado_usuario', uid=u.id) }}" class="d-inline"
+              {% if u.activo != 0 %}data-confirm="{{ u.nombre }} ya no podrá iniciar sesión." data-confirm-titulo="¿Desactivar usuario?" data-confirm-ok="Desactivar"{% endif %}>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm {{ 'btn-outline-danger' if u.activo != 0 else 'btn-light' }}" type="submit">{{ 'Desactivar' if u.activo != 0 else 'Activar' }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+
+<div class="modal fade" id="modalUsuario" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="POST" action="{{ url_for('guardar_usuario') }}" class="modal-content">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo usuario</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3"><label>Nombre completo</label><input name="nombre" class="form-control" required maxlength="60"></div>
+        <div class="mb-3"><label>Usuario para entrar</label><input name="usuario" class="form-control" required maxlength="30" autocomplete="off"
+             pattern="[A-Za-z0-9_.\-]{3,30}" title="3 a 30 caracteres: letras, números, punto, guion"></div>
+        <div class="row">
+          <div class="col mb-2"><label>Contraseña</label><input name="password" type="password" class="form-control" required minlength="6" autocomplete="new-password"></div>
+          <div class="col mb-2"><label>Rol</label>
+            <select name="rol" class="form-select"><option value="cajero">Cajero</option><option value="admin">Administrador</option></select></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" type="submit">Crear usuario</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="modalClave" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="POST" id="formClave" class="modal-content">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Cambiar contraseña de <span id="clave_nombre"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label>Nueva contraseña</label>
+        <input name="password" type="password" class="form-control" required minlength="6" autocomplete="new-password">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" type="submit">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.btn-clave').forEach(b => b.addEventListener('click', () => {
+    document.getElementById('clave_nombre').textContent = b.dataset.nombre;
+    document.getElementById('formClave').action = `/usuarios/${b.dataset.id}/clave`;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalClave')).show();
+}));
+</script>
+{% endblock %}

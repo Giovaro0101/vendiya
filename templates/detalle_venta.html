@@ -5,9 +5,27 @@
   <div>
     <a href="{{ url_for('ventas') }}" class="text-muted small text-decoration-none"><i class="bi bi-arrow-left"></i> Ventas</a>
     <h1 class="mt-1">Factura {{ venta.numero_factura }}</h1>
-    <p>{{ venta.fecha }} · <span class="badge pill-neutral">{{ venta.forma_pago }}</span></p>
+    <p>
+      {{ venta.fecha }} · Atendió {{ venta.usuario or '—' }}
+      {% if venta.cliente %}· Cliente <b class="text-body">{{ venta.cliente }}</b>{% endif %}
+      {% if venta.estado == 'anulada' %}<span class="badge bg-danger ms-1">Anulada</span>{% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-light" target="_blank" rel="noopener"
+       href="{{ url_for('ticket_venta', vid=venta.id, arch=1 if venta.archivado else None, auto=1) }}"><i class="bi bi-printer"></i> Ticket</a>
+    {% if es_admin and venta.estado != 'anulada' and not venta.archivado %}
+      <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalAnular"><i class="bi bi-x-octagon"></i> Anular</button>
+    {% endif %}
   </div>
 </div>
+
+{% if venta.estado == 'anulada' %}
+  <div class="alert alert-danger">
+    <b>Venta anulada</b> el {{ venta.anulada_fecha }}. Motivo: {{ venta.anulada_motivo or '—' }}.
+    El stock fue devuelto al inventario y la venta no cuenta en los reportes.
+  </div>
+{% endif %}
 
 <div class="card">
   <div class="card-body">
@@ -19,7 +37,7 @@
             <th class="text-end">Cant.</th>
             <th class="text-end">Precio</th>
             <th class="text-end">Subtotal</th>
-            <th class="text-end">Ganancia</th>
+            {% if es_admin %}<th class="text-end">Ganancia</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -29,7 +47,7 @@
             <td class="text-end num">{{ d.cantidad }}</td>
             <td class="text-end num">${{ '%.2f'|format(d.precio_unitario) }}</td>
             <td class="text-end num">${{ '%.2f'|format(d.subtotal) }}</td>
-            <td class="text-end num text-success">${{ '%.2f'|format(d.ganancia or 0) }}</td>
+            {% if es_admin %}<td class="text-end num text-success">${{ '%.2f'|format(d.ganancia or 0) }}</td>{% endif %}
           </tr>
           {% endfor %}
         </tbody>
@@ -41,26 +59,57 @@
         <div class="stat-label">Pagos</div>
         <div class="totales" style="max-width:320px">
           {% for p in pagos %}
-            <div class="fila"><span>{{ p.metodo }}</span><span>${{ '%.2f'|format(p.monto) }}</span></div>
+            <div class="fila"><span>{{ METODOS_PAGO.get(p.metodo, p.metodo) }}</span><span>${{ '%.2f'|format(p.monto) }}</span></div>
+          {% else %}
+            <div class="fila"><span>Sin pagos al momento de la venta</span></div>
           {% endfor %}
-          {% if venta.forma_pago == 'efectivo' %}
-            <div class="fila"><span>Recibido</span><span>${{ '%.2f'|format(venta.monto_recibido) }}</span></div>
-            <div class="fila"><span>Cambio</span><span>${{ '%.2f'|format(venta.cambio) }}</span></div>
+          {% if venta.cambio %}
+            <div class="fila"><span>Cambio entregado</span><span>${{ '%.2f'|format(venta.cambio) }}</span></div>
+          {% endif %}
+          {% if venta.deuda and venta.deuda > 0 %}
+            <div class="fila"><span>Quedó a crédito</span><span class="text-danger">${{ '%.2f'|format(venta.deuda) }}</span></div>
           {% endif %}
         </div>
       </div>
       <div class="col-md-6">
         <div class="totales resumen">
           <div class="fila"><span>Subtotal</span><span>${{ '%.2f'|format(venta.subtotal) }}</span></div>
+          {% if venta.descuento %}<div class="fila"><span>Descuento</span><span>-${{ '%.2f'|format(venta.descuento) }}</span></div>{% endif %}
           <div class="fila"><span>IVA</span><span>${{ '%.2f'|format(venta.iva) }}</span></div>
-          <div class="fila"><span>Ganancia</span><span class="text-success">${{ '%.2f'|format(venta.ganancia or 0) }}</span></div>
+          {% if es_admin %}<div class="fila"><span>Ganancia</span><span class="text-success">${{ '%.2f'|format(venta.ganancia or 0) }}</span></div>{% endif %}
           <div class="total">
             <span class="etiqueta">Total</span>
             <span id="total">${{ '%.2f'|format(venta.total) }}</span>
           </div>
+          {% if venta.tasa %}
+            <div class="fila"><span>En bolívares (tasa {{ '%.2f'|format(venta.tasa) }})</span><span>{{ '%.2f'|format(venta.total * venta.tasa) }} Bs</span></div>
+          {% endif %}
         </div>
       </div>
     </div>
   </div>
 </div>
+
+{% if es_admin and venta.estado != 'anulada' and not venta.archivado %}
+<div class="modal fade" id="modalAnular" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="POST" action="{{ url_for('anular_venta', vid=venta.id) }}" class="modal-content">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Anular factura {{ venta.numero_factura }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">El stock de los productos vuelve al inventario{% if venta.deuda and venta.deuda > 0 %} y la deuda del cliente se reduce en ${{ '%.2f'|format(venta.deuda) }}{% endif %}. Esta acción no se puede deshacer.</p>
+        <label class="form-label">Motivo</label>
+        <input name="motivo" class="form-control" required maxlength="200" placeholder="Ej.: error de cobro, devolución del cliente">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-danger" type="submit">Anular venta</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

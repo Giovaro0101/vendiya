@@ -3,7 +3,7 @@
 // Soporta: caché offline + sincronización de ventas pendientes
 // ============================================================
 
-const CACHE_NAME = 'vendiya-v2';
+const CACHE_NAME = 'vendiya-v3';
 
 // Assets que se cachean al instalar
 const URLS_TO_CACHE = [
@@ -14,7 +14,11 @@ const URLS_TO_CACHE = [
   '/ventas',
   '/reportes',
   '/asistente',
+  '/clientes',
+  '/caja',
   '/static/css/estilo.css',
+  '/static/app.js',
+  '/static/pwa.js',
   '/static/favicon.png',
   '/static/favicon-32x32.png',
   '/static/android-chrome-192x192.png',
@@ -98,14 +102,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para assets: Cache-first, fallback a red
+  // Archivos propios (/static): red primero para recibir las actualizaciones,
+  // con el caché como respaldo sin conexión
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(request).then((response) => {
+        if (response && response.status === 200) {
+          const copia = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copia));
+        }
+        return response;
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Librerías externas (CDN): caché primero
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) {
         return cached;
       }
       return fetch(request).then((response) => {
-        // Cachear respuesta si es válida
         if (response && response.status === 200) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -113,19 +131,22 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return response;
-      }).catch(() => {
-        // Si es imagen, devolver placeholder
-        if (request.destination === 'image') {
-          return new Response('', { status: 404 });
-        }
       });
     })
   );
 });
 
+
 // ============================================================
 // SYNC: sincronizar ventas pendientes cuando vuelve internet
 // ============================================================
+// Al cerrar sesión o cambiar de cuenta se descartan las páginas guardadas (pueden ser de otro negocio)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'LIMPIAR_CACHE') {
+    event.waitUntil(caches.delete(CACHE_NAME));
+  }
+});
+
 self.addEventListener('sync', (event) => {
   console.log('[SW] Sync event:', event.tag);
 
@@ -141,4 +162,5 @@ async function sincronizarVentasPendientes() {
   clients.forEach((client) => {
     client.postMessage({ type: 'SYNC_VENTAS' });
   });
+
 }

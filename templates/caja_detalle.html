@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - Cierre de caja{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('caja') }}" class="text-muted small text-decoration-none"><i class="bi bi-arrow-left"></i> Caja</a>
+    <h1 class="mt-1">Caja #{{ c.id }}</h1>
+    <p>{{ c.fecha_apertura }}{% if c.fecha_cierre %} → {{ c.fecha_cierre }}{% else %} (abierta){% endif %} · {{ c.usuario or '—' }}</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    {% set resumen = resumen %}
+    {% include 'partials/resumen_caja.html' %}
+  </div>
+  {% if c.estado == 'cerrada' %}
+  <div class="col-lg-5">
+    <div class="card stat">
+      <div class="stat-label">Resultado del cuadre</div>
+      <div class="totales">
+        <div class="fila"><span>Efectivo esperado</span><span>${{ '%.2f'|format(c.efectivo_esperado or 0) }}</span></div>
+        <div class="fila"><span>Efectivo contado</span><span>${{ '%.2f'|format(c.efectivo_contado or 0) }}</span></div>
+        <div class="total">
+          <span class="etiqueta">Diferencia</span>
+          <span class="{{ 'text-danger' if (c.diferencia or 0) < -0.004 else ('text-success' if (c.diferencia or 0) > 0.004 else '') }}">
+            {{ '%+.2f'|format(c.diferencia or 0) }}
+          </span>
+        </div>
+      </div>
+      <div class="stat-meta mt-3">
+        {% if (c.diferencia or 0)|abs < 0.005 %}La caja cuadra perfectamente.
+        {% elif c.diferencia > 0 %}Sobra dinero respecto a lo esperado.
+        {% else %}Falta dinero respecto a lo esperado.{% endif %}
+      </div>
+      {% if c.notas %}<div class="stat-meta">Notas: {{ c.notas }}</div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

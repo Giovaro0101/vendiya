@@ -69,7 +69,7 @@ async function preguntar(pregunta) {
     const idPensando = agregarMensaje('Asistente', '⏳ Pensando...', 'asistente');
 
     try {
-        const res = await fetch('/api/asistente', {
+        const res = await apiFetch('/api/asistente', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({pregunta})

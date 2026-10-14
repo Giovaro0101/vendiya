@@ -17,7 +17,7 @@ def obtener_contexto(pregunta):
             r = conn.execute("""
                 SELECT COUNT(*) as num, COALESCE(SUM(total),0) as total,
                        COALESCE(SUM(ganancia),0) as ganancia
-                FROM ventas WHERE date(fecha) = ?
+                FROM ventas WHERE estado = 'completada' AND date(fecha) = ?
             """, (hoy,)).fetchone()
             contexto_partes.append(
                 f"VENTAS DE HOY ({hoy}): {r['num']} facturas, "
@@ -30,7 +30,7 @@ def obtener_contexto(pregunta):
             r = conn.execute("""
                 SELECT COUNT(*) as num, COALESCE(SUM(total),0) as total,
                        COALESCE(SUM(ganancia),0) as ganancia
-                FROM ventas WHERE date(fecha) >= ?
+                FROM ventas WHERE estado = 'completada' AND date(fecha) >= ?
             """, (desde,)).fetchone()
             contexto_partes.append(
                 f"VENTAS ÚLTIMA SEMANA (desde {desde}): {r['num']} facturas, "
@@ -43,7 +43,7 @@ def obtener_contexto(pregunta):
             r = conn.execute("""
                 SELECT COUNT(*) as num, COALESCE(SUM(total),0) as total,
                        COALESCE(SUM(ganancia),0) as ganancia
-                FROM ventas WHERE date(fecha) >= ?
+                FROM ventas WHERE estado = 'completada' AND date(fecha) >= ?
             """, (desde,)).fetchone()
             contexto_partes.append(
                 f"VENTAS QUINCENA (desde {desde}): {r['num']} facturas, "
@@ -74,6 +74,7 @@ def obtener_contexto(pregunta):
                 SELECT p.nombre, SUM(d.cantidad) as cant, SUM(d.subtotal) as total
                 FROM venta_detalle d
                 JOIN productos p ON d.producto_id = p.id
+                JOIN ventas v ON v.id = d.venta_id AND v.estado = 'completada'
                 GROUP BY d.producto_id
                 ORDER BY cant DESC LIMIT 5
             """).fetchall()
@@ -87,11 +88,11 @@ def obtener_contexto(pregunta):
         if any(k in pregunta_lower for k in ['ganancia', 'gané', 'gane', 'margen']):
             r = conn.execute("""
                 SELECT COALESCE(SUM(ganancia),0) as g, COALESCE(SUM(total),0) as t
-                FROM ventas
+                FROM ventas WHERE estado = 'completada'
             """).fetchone()
             arch_r = arch.execute("""
                 SELECT COALESCE(SUM(ganancia),0) as g, COALESCE(SUM(total),0) as t
-                FROM ventas
+                FROM ventas WHERE estado = 'completada'
             """).fetchone()
             total_gan = r['g'] + arch_r['g']
             total_fac = r['t'] + arch_r['t']
@@ -126,7 +127,7 @@ def obtener_contexto(pregunta):
             r = conn.execute("""
                 SELECT COUNT(*) as num, COALESCE(SUM(total),0) as total,
                        COALESCE(SUM(ganancia),0) as ganancia
-                FROM ventas WHERE date(fecha) = ?
+                FROM ventas WHERE estado = 'completada' AND date(fecha) = ?
             """, (hoy,)).fetchone()
             total_prod = conn.execute("SELECT COUNT(*) as c FROM productos WHERE activo = 1").fetchone()['c']
             contexto_partes.append(

@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    {% if session.negocio_id %}<meta name="negocio-id" content="{{ session.negocio_id }}">{% endif %}
     <title>{% block title %}VendiYA{% endblock %}</title>
 
     <!-- Favicons -->
@@ -34,12 +36,13 @@
 
 <!-- Banner de offline -->
 <div id="offline-banner" style="display:none">
-  <i class="bi bi-wifi-off"></i>Sin conexión · las ventas se sincronizarán al volver
+  <i class="bi bi-wifi-off"></i><span id="offline-texto">Sin conexión · las ventas se guardarán y sincronizarán al volver</span>
 </div>
 
-<!-- Navbar -->
 {% set ep = request.endpoint %}
-<nav class="navbar navbar-expand-lg app-nav">
+{% if session.usuario_id %}
+<!-- Navbar -->
+<nav class="navbar navbar-expand-xl app-nav">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('pos') }}">
       <img src="{{ url_for('static', filename='favicon.png') }}" alt="">
@@ -50,28 +53,70 @@
       <i class="bi bi-list fs-5"></i>
     </button>
     <div class="collapse navbar-collapse" id="menuPrincipal">
-      <div class="navbar-nav mx-lg-auto">
+      <div class="navbar-nav mx-xl-auto">
         <a class="nav-link {{ 'active' if ep == 'pos' }}" href="{{ url_for('pos') }}"><i class="bi bi-cart3"></i>Vender</a>
-        <a class="nav-link {{ 'active' if ep == 'productos' }}" href="{{ url_for('productos') }}"><i class="bi bi-box-seam"></i>Productos</a>
-        <a class="nav-link {{ 'active' if ep == 'inventario' }}" href="{{ url_for('inventario') }}"><i class="bi bi-stack"></i>Inventario</a>
+        <a class="nav-link {{ 'active' if ep in ('clientes', 'cliente_detalle') }}" href="{{ url_for('clientes') }}"><i class="bi bi-people"></i>Clientes</a>
+        <a class="nav-link {{ 'active' if ep in ('caja', 'caja_detalle') }}" href="{{ url_for('caja') }}"><i class="bi bi-safe2"></i>Caja</a>
         <a class="nav-link {{ 'active' if ep in ('ventas', 'ver_venta') }}" href="{{ url_for('ventas') }}"><i class="bi bi-receipt"></i>Ventas</a>
+        {% if es_admin %}
+        <a class="nav-link {{ 'active' if ep == 'productos' }}" href="{{ url_for('productos') }}"><i class="bi bi-box-seam"></i>Productos</a>
+        <a class="nav-link {{ 'active' if ep == 'inventario' }}" href="{{ url_for('inventario') }}"><i class="bi bi-stack"></i>Inventario{% if alerta_stock %}<span class="nav-badge">{{ alerta_stock }}</span>{% endif %}</a>
         <a class="nav-link {{ 'active' if ep == 'reportes' }}" href="{{ url_for('reportes') }}"><i class="bi bi-bar-chart"></i>Reportes</a>
-        <a class="nav-link {{ 'active' if ep == 'asistente' }}" href="{{ url_for('asistente') }}"><i class="bi bi-stars"></i>Asistente</a>
+        <div class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {{ 'active' if ep in ('gastos', 'usuarios', 'configuracion', 'asistente') }}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-gear"></i>Administrar
+          </a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('gastos') }}"><i class="bi bi-wallet2"></i>Gastos</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('usuarios') }}"><i class="bi bi-person-gear"></i>Usuarios</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('configuracion') }}"><i class="bi bi-sliders"></i>Configuración</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('asistente') }}"><i class="bi bi-stars"></i>Asistente IA</a></li>
+          </ul>
+        </div>
+        {% endif %}
       </div>
-      <div class="navbar-nav align-items-lg-center">
-        <span class="usuario d-none d-lg-inline-flex">
-          <i class="bi bi-person-circle"></i>{{ session.usuario_nombre }}
+      <div class="navbar-nav align-items-xl-center">
+        <span id="chip-pendientes" class="chip-pend" hidden title="Ventas hechas sin conexión que aún no se enviaron">
+          <i class="bi bi-cloud-arrow-up"></i><span data-n>0</span> por sincronizar
         </span>
-        <a class="nav-link" href="{{ url_for('logout') }}" title="Cerrar sesión">
-          <i class="bi bi-box-arrow-right"></i><span class="d-lg-none">Salir</span>
-        </a>
+        <div class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-person-circle"></i>{{ session.usuario_nombre }}
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><span class="dropdown-item-text text-muted small">{{ 'Administrador' if es_admin else 'Cajero' }} · {{ negocio.nombre_negocio }}</span></li>
+            <li><a class="dropdown-item" href="{{ url_for('cuenta') }}"><i class="bi bi-key"></i>Mi cuenta</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <form method="POST" action="{{ url_for('logout') }}" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right"></i>Cerrar sesión</button>
+              </form>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
 </nav>
+{% endif %}
 
 <!-- Contenido -->
 <main class="app-main">
+    {% if suscripcion and suscripcion.dias is not none and suscripcion.dias <= 7 and es_admin %}
+      <div class="alert alert-warning d-flex align-items-center gap-2">
+        <i class="bi bi-calendar-event"></i>
+        <span>{% if suscripcion.dias <= 0 %}Tu suscripción vence hoy.{% else %}Tu suscripción vence en {{ suscripcion.dias }} día{{ 's' if suscripcion.dias != 1 }} ({{ suscripcion.vence }}).{% endif %}
+        {% if SOPORTE %}Para renovar: {{ SOPORTE }}.{% else %}Contacta a soporte para renovar.{% endif %}</span>
+      </div>
+    {% endif %}
+    {% if pass_default and ep != 'cuenta' %}
+      <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span><i class="bi bi-shield-exclamation me-1"></i>Sigues usando la contraseña por defecto. Cámbiala para proteger tu negocio.</span>
+        <a class="btn btn-sm btn-light" href="{{ url_for('cuenta') }}">Cambiar ahora</a>
+      </div>
+    {% endif %}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for cat, msg in messages %}
         <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}
@@ -84,6 +129,7 @@
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 <!-- PWA Logic -->
 <script src="{{ url_for('static', filename='pwa.js') }}"></script>
 </body>

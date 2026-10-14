@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - Mi cuenta{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Mi cuenta</h1>
+    <p>{{ session.usuario_nombre }} · {{ 'Administrador' if es_admin else 'Cajero' }}</p>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-6 col-lg-4">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title-sm">Cambiar contraseña</h2></div>
+      <div class="card-body">
+        <form method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3"><label class="form-label">Contraseña actual</label>
+            <input name="actual" type="password" class="form-control" required autocomplete="current-password"></div>
+          <div class="mb-3"><label class="form-label">Nueva contraseña</label>
+            <input name="nueva" type="password" class="form-control" required minlength="6" autocomplete="new-password">
+            <div class="form-text">Mínimo 6 caracteres.</div></div>
+          <div class="mb-4"><label class="form-label">Repite la nueva contraseña</label>
+            <input name="confirmar" type="password" class="form-control" required minlength="6" autocomplete="new-password"></div>
+          <button class="btn btn-primary w-100" type="submit">Cambiar contraseña</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

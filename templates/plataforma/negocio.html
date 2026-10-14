@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - {{ n.nombre }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('plataforma_panel') }}" class="text-muted small text-decoration-none"><i class="bi bi-arrow-left"></i> Plataforma</a>
+    <h1 class="mt-1">{{ n.nombre }}
+      {% if n.estado == 'activo' %}<span class="badge bg-success align-middle fs-6">Activo</span>
+      {% elif n.estado == 'vencido' %}<span class="badge bg-danger align-middle fs-6">Vencido</span>
+      {% else %}<span class="badge bg-warning align-middle fs-6">Suspendido</span>{% endif %}</h1>
+    <p>Código <b class="text-body">{{ n.slug }}</b> · creado {{ n.creado[:10] }} · plan {{ n.plan }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if n.estado_guardado == 'suspendido' %}
+      <form method="POST" action="{{ url_for('plataforma_estado', nid=n.id) }}" class="m-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="activar">
+        <button class="btn btn-primary" type="submit">Reactivar</button></form>
+    {% else %}
+      <form method="POST" action="{{ url_for('plataforma_estado', nid=n.id) }}" class="m-0"
+            data-confirm="Nadie de «{{ n.nombre }}» podrá entrar hasta que lo reactives. Sus datos se conservan."
+            data-confirm-titulo="¿Suspender negocio?" data-confirm-ok="Suspender">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="suspender">
+        <button class="btn btn-outline-danger" type="submit">Suspender</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Ventas (30 días)</div><div class="stat-value">{{ stats.ventas_30d }}</div>
+    <div class="stat-meta">${{ '%.2f'|format(stats.total_30d) }} facturado</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Última venta</div><div class="fs-5 fw-bold num">{{ stats.ultima_venta or '—' }}</div>
+    <div class="stat-meta">Último acceso: {{ n.ultimo_acceso or '—' }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Usuarios</div><div class="stat-value">{{ stats.usuarios }} <small class="text-muted fs-6">/ {{ n.max_usuarios }}</small></div>
+    <div class="stat-meta">{{ stats.productos }} productos · {{ stats.clientes }} clientes</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat"><div class="stat-label">Vencimiento</div>
+    <div class="fs-5 fw-bold num">{{ n.vence or 'Sin límite' }}</div>
+    <div class="stat-meta">{% if n.dias_restantes is not none %}{{ n.dias_restantes }} días restantes{% endif %} · {{ stats.mb }} MB en disco</div></div></div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card mb-4">
+      <div class="card-header"><h2 class="card-title-sm">Acceso del cliente</h2></div>
+      <div class="card-body">
+        <p class="text-muted small mb-2">Este enlace ya trae el código del negocio escrito:</p>
+        <input class="form-control mb-3" readonly value="{{ enlace }}" onclick="this.select()">
+        <div class="stat-label">Usuarios</div>
+        <div class="table-responsive"><table class="table table-sm">
+          <tbody>
+            {% for u in usuarios %}
+            <tr><td class="fw-medium">{{ u.nombre }}</td><td class="text-muted">{{ u.usuario }}</td>
+                <td>{{ 'Admin' if u.rol == 'admin' else 'Cajero' }}</td>
+                <td>{% if u.activo == 0 %}<span class="badge bg-danger">Inactivo</span>{% endif %}</td></tr>
+            {% endfor %}
+          </tbody></table></div>
+        <form method="POST" action="{{ url_for('plataforma_clave', nid=n.id) }}" class="row g-2 mt-1"
+              data-confirm="Se cambiará la contraseña de ese usuario y se reactivará su cuenta si estaba desactivada."
+              data-confirm-titulo="¿Restablecer contraseña?" data-confirm-ok="Restablecer">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-5"><select name="usuario" class="form-select form-select-sm">
+            {% for u in usuarios %}<option>{{ u.usuario }}</option>{% endfor %}</select></div>
+          <div class="col-4"><input name="password" class="form-control form-control-sm" placeholder="Nueva contraseña" minlength="6" required autocomplete="off"></div>
+          <div class="col-3 d-grid"><button class="btn btn-sm btn-light" type="submit">Restablecer</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title-sm">Historial</h2></div>
+      <div class="card-body pt-2">
+        <div class="table-responsive"><table class="table table-sm"><tbody>
+          {% for e in eventos %}
+          <tr><td class="text-muted num" style="width:160px">{{ e.fecha }}</td><td>{{ e.tipo }}</td><td class="text-muted">{{ e.detalle or '' }}</td></tr>
+          {% else %}<tr><td class="empty">Sin eventos.</td></tr>{% endfor %}
+        </tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card mb-4">
+      <div class="card-header"><h2 class="card-title-sm">Suscripción</h2></div>
+      <div class="card-body">
+        <div class="d-flex gap-2 flex-wrap mb-3">
+          {% for d in (30, 90, 365) %}
+          <form method="POST" action="{{ url_for('plataforma_extender', nid=n.id) }}" class="m-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="dias" value="{{ d }}">
+            <button class="btn btn-sm btn-primary" type="submit">+{{ d }} días</button></form>
+          {% endfor %}
+          <form method="POST" action="{{ url_for('plataforma_extender', nid=n.id) }}" class="m-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="sin_limite" value="1">
+            <button class="btn btn-sm btn-light" type="submit">Sin vencimiento</button></form>
+        </div>
+        <form method="POST" action="{{ url_for('plataforma_extender', nid=n.id) }}" class="input-group input-group-sm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <span class="input-group-text">Vence el</span>
+          <input type="date" name="fecha" class="form-control" required value="{{ n.vence or '' }}">
+          <button class="btn btn-light" type="submit">Fijar</button>
+        </form>
+        <p class="text-muted small mt-2 mb-0">«+N días» suma desde hoy, o desde el vencimiento si aún no ha pasado.</p>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><h2 class="card-title-sm">Datos y plan</h2></div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('plataforma_datos', nid=n.id) }}" class="row g-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-6"><label class="form-label">Plan</label>
+            <select name="plan" class="form-select">{% for p in planes %}<option {{ 'selected' if p == n.plan }}>{{ p }}</option>{% endfor %}</select></div>
+          <div class="col-6"><label class="form-label">Máx. usuarios</label>
+            <input name="max_usuarios" type="number" min="1" max="1000" value="{{ n.max_usuarios }}" class="form-control"></div>
+          <div class="col-6"><label class="form-label">Correo</label><input name="email" type="email" class="form-control" value="{{ n.email or '' }}" maxlength="120"></div>
+          <div class="col-6"><label class="form-label">Teléfono</label><input name="telefono" class="form-control" value="{{ n.telefono or '' }}" maxlength="30"></div>
+          <div class="col-12"><label class="form-label">Notas internas</label><textarea name="notas" class="form-control" rows="3" maxlength="500">{{ n.notas or '' }}</textarea></div>
+          <div class="col-12"><button class="btn btn-primary" type="submit">Guardar</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card border-danger-subtle">
+      <div class="card-header"><h2 class="card-title-sm text-danger">Zona de peligro</h2></div>
+      <div class="card-body">
+        <p class="text-muted small">El negocio dejará de aparecer y nadie podrá entrar. Los datos quedan en disco (carpeta <code>data/negocios/{{ n.id }}</code>) por si hay que recuperarlos.</p>
+        <form method="POST" action="{{ url_for('plataforma_eliminar', nid=n.id) }}" class="input-group input-group-sm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input name="confirmar" class="form-control" placeholder="Escribe «{{ n.slug }}» para confirmar" autocomplete="off" required>
+          <button class="btn btn-outline-danger" type="submit">Eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

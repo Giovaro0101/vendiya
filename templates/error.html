@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - Error {{ codigo }}{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+  <div class="display-1 fw-bold text-muted">{{ codigo }}</div>
+  <p class="lead mb-4">{{ mensaje }}</p>
+  <a class="btn btn-primary" href="{{ url_for('pos') }}">Volver al inicio</a>
+</div>
+{% endblock %}

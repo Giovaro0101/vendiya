@@ -8,9 +8,27 @@
   </div>
 </div>
 
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Valor a costo</div>
+      <div class="stat-value">${{ '%.2f'|format(valor.costo) }}</div>
+      <div class="stat-meta">Lo que invertiste en mercancía</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Valor a precio de venta</div>
+      <div class="stat-value">${{ '%.2f'|format(valor.venta) }}</div>
+      <div class="stat-meta">Ganancia potencial: <b>${{ '%.2f'|format(valor.venta - valor.costo) }}</b></div>
+    </div>
+  </div>
+</div>
+
 <div class="card mb-4">
   <div class="card-body">
     <form method="POST" action="{{ url_for('ajuste_inventario') }}" class="row g-3 align-items-end inventario-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="col-md-4">
         <label class="form-label">Producto</label>
         <select name="producto_id" class="form-select" required>
@@ -22,33 +40,39 @@
       </div>
       <div class="col-md-2">
         <label class="form-label">Movimiento</label>
-        <select name="tipo" class="form-select">
-          <option value="entrada">Entrada</option>
+        <select name="tipo" id="tipo_mov" class="form-select">
+          <option value="entrada">Entrada (compra)</option>
           <option value="salida">Salida / merma</option>
           <option value="ajuste">Ajuste (nuevo stock)</option>
         </select>
       </div>
       <div class="col-md-2">
-        <label class="form-label">Cantidad</label>
-        <input name="cantidad" type="number" step="0.01" class="form-control"
-               placeholder="0" required>
+        <label class="form-label" id="lbl_cantidad">Cantidad</label>
+        <input name="cantidad" type="number" step="0.01" min="0" class="form-control" placeholder="0" required>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2" id="grupo_costo">
+        <label class="form-label">Costo unit. ($)</label>
+        <input name="costo" type="number" step="0.01" min="0" class="form-control" placeholder="Opcional"
+               title="Si lo indicas, actualiza el precio de compra del producto">
+      </div>
+      <div class="col-md-2">
         <label class="form-label">Motivo</label>
-        <input name="motivo" class="form-control" placeholder="Opcional">
+        <input name="motivo" class="form-control" placeholder="Opcional" maxlength="200">
       </div>
-      <div class="col-md-1">
-        <button class="btn btn-primary w-100">Aplicar</button>
+      <div class="col-12 text-end">
+        <button class="btn btn-primary" type="submit">Aplicar movimiento</button>
       </div>
     </form>
   </div>
 </div>
 
-<div class="table-card">
+<h2 class="h6 text-muted text-uppercase mb-2" style="letter-spacing:.05em">Existencias</h2>
+<div class="table-card mb-4">
 <div class="table-responsive">
 <table class="table table-hover">
   <thead>
-    <tr><th>Producto</th><th>Categoría</th><th class="text-end">Stock</th><th class="text-end">Mínimo</th><th>Estado</th></tr>
+    <tr><th>Producto</th><th>Categoría</th><th class="text-end">Stock</th><th class="text-end">Mínimo</th>
+        <th class="text-end">Valor a costo</th><th>Estado</th></tr>
   </thead>
   <tbody>
     {% for p in productos %}
@@ -57,6 +81,7 @@
       <td class="text-muted">{{ p.categoria or '—' }}</td>
       <td class="text-end num">{{ p.stock_actual }}</td>
       <td class="text-end text-muted num">{{ p.stock_minimo }}</td>
+      <td class="text-end num text-muted">${{ '%.2f'|format(p.stock_actual * p.precio_compra if p.stock_actual > 0 else 0) }}</td>
       <td>
         {% if p.stock_actual <= p.stock_minimo %}
           <span class="badge bg-danger">Stock bajo</span>
@@ -66,10 +91,47 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="empty">No hay productos registrados.</td></tr>
+    <tr><td colspan="6" class="empty">No hay productos registrados.</td></tr>
     {% endfor %}
   </tbody>
 </table>
 </div>
 </div>
+
+<h2 class="h6 text-muted text-uppercase mb-2" style="letter-spacing:.05em">Últimos movimientos</h2>
+<div class="table-card">
+<div class="table-responsive">
+<table class="table table-hover">
+  <thead>
+    <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th class="text-end">Cantidad</th><th>Motivo</th><th>Usuario</th></tr>
+  </thead>
+  <tbody>
+    {% for m in movimientos %}
+    <tr>
+      <td class="text-muted num">{{ m.fecha }}</td>
+      <td class="fw-medium">{{ m.producto or '—' }}</td>
+      <td>
+        {% if m.tipo == 'entrada' %}<span class="badge bg-success">Entrada</span>
+        {% elif m.tipo == 'salida' %}<span class="badge bg-danger">Salida</span>
+        {% else %}<span class="badge bg-warning">Ajuste</span>{% endif %}
+      </td>
+      <td class="text-end num">{{ m.cantidad }}{% if m.costo %} <small class="text-muted">· ${{ '%.2f'|format(m.costo) }} c/u</small>{% endif %}</td>
+      <td class="text-muted">{{ m.motivo or '—' }}</td>
+      <td class="text-muted">{{ m.usuario or '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty">Aún no hay movimientos.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+
+<script>
+document.getElementById('tipo_mov').addEventListener('change', (e) => {
+    const t = e.target.value;
+    document.getElementById('lbl_cantidad').textContent = t === 'ajuste' ? 'Nuevo stock' : 'Cantidad';
+    document.getElementById('grupo_costo').style.visibility = t === 'entrada' ? 'visible' : 'hidden';
+});
+</script>
 {% endblock %}

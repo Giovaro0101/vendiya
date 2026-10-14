@@ -1,0 +1,48 @@
+<div class="card h-100">
+  <div class="card-header"><h2 class="card-title-sm">Resumen del turno</h2></div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-6">
+        <div class="stat-label">Ventas</div>
+        <div class="fs-4 fw-bold num">{{ resumen.num_ventas }}</div>
+      </div>
+      <div class="col-6">
+        <div class="stat-label">Facturado</div>
+        <div class="fs-4 fw-bold num">${{ '%.2f'|format(resumen.total_ventas) }}</div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Método</th><th class="text-end">Ventas</th><th class="text-end">Abonos</th><th class="text-end">Total</th></tr></thead>
+        <tbody>
+          {% for m in resumen.metodos %}
+          <tr>
+            <td class="fw-medium">{{ METODOS_PAGO.get(m.metodo, m.metodo) }}</td>
+            <td class="text-end num">${{ '%.2f'|format(m.ventas) }}</td>
+            <td class="text-end num text-muted">${{ '%.2f'|format(m.abonos) }}</td>
+            <td class="text-end num">${{ '%.2f'|format(m.total) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty">Aún no hay cobros en este turno.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="totales mt-2">
+      <div class="fila"><span>Fondo inicial</span><span>${{ '%.2f'|format(resumen.fondo) }}</span></div>
+      <div class="fila"><span>+ Efectivo cobrado (ventas y abonos)</span><span>${{ '%.2f'|format(resumen.efectivo_cobrado) }}</span></div>
+      <div class="fila"><span>− Cambio entregado</span><span>${{ '%.2f'|format(resumen.cambio) }}</span></div>
+      <div class="fila"><span>− Gastos pagados de la caja</span><span>${{ '%.2f'|format(resumen.gastos_caja) }}</span></div>
+      <div class="total">
+        <span class="etiqueta">Efectivo esperado</span>
+        <span>${{ '%.2f'|format(resumen.esperado) }}</span>
+      </div>
+      {% if resumen.credito %}
+      <div class="fila mt-2"><span>Vendido a crédito (no entra a caja)</span><span>${{ '%.2f'|format(resumen.credito) }}</span></div>
+      {% endif %}
+    </div>
+    <p class="text-muted small mt-3 mb-0">Se considera efectivo: «Efectivo ($)» y «Efectivo (Bs)», en dólares equivalentes.</p>
+  </div>
+</div>

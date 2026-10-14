@@ -4,33 +4,146 @@
 <div class="page-header">
   <div>
     <h1>Reportes</h1>
-    <p>Resumen del día y estado del inventario.</p>
+    <p>Del {{ r.desde }} al {{ r.hasta }}</p>
+  </div>
+  <a class="btn btn-light" href="{{ url_for('exportar_ventas', desde=r.desde, hasta=r.hasta) }}"><i class="bi bi-download"></i> Exportar ventas (CSV)</a>
+</div>
+
+<form method="GET" class="filtros mb-4">
+  <div class="btn-group" role="group" aria-label="Rango">
+    {% for clave, texto in [('hoy', 'Hoy'), ('semana', '7 días'), ('mes', 'Este mes'), ('30', '30 días'), ('todo', 'Todo')] %}
+      <a class="btn btn-sm {{ 'btn-primary' if r.rango == clave else 'btn-light' }}" href="{{ url_for('reportes', rango=clave) }}">{{ texto }}</a>
+    {% endfor %}
+  </div>
+  <input type="date" name="desde" value="{{ r.desde }}" class="form-control form-control-sm" aria-label="Desde">
+  <input type="date" name="hasta" value="{{ r.hasta }}" class="form-control form-control-sm" aria-label="Hasta">
+  <button class="btn btn-sm btn-light" type="submit">Aplicar</button>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Facturado</div>
+      <div class="stat-value">${{ '%.2f'|format(resumen.total) }}</div>
+      <div class="stat-meta"><b>{{ resumen.num }}</b> ventas · ticket promedio <b>${{ '%.2f'|format(resumen.ticket) }}</b></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Ganancia bruta</div>
+      <div class="stat-value text-success">${{ '%.2f'|format(resumen.ganancia) }}</div>
+      <div class="stat-meta">Ventas menos costo de la mercancía</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Gastos</div>
+      <div class="stat-value">${{ '%.2f'|format(resumen.gastos) }}</div>
+      <div class="stat-meta"><a href="{{ url_for('gastos', desde=r.desde, hasta=r.hasta) }}">Ver gastos</a></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Ganancia neta</div>
+      <div class="stat-value {{ 'text-success' if resumen.neta >= 0 else 'text-danger' }}">${{ '%.2f'|format(resumen.neta) }}</div>
+      <div class="stat-meta">Ganancia bruta menos gastos</div>
+    </div>
   </div>
 </div>
 
 <div class="row g-3 mb-4">
   <div class="col-sm-6 col-lg-3">
     <div class="card stat">
-      <div class="stat-label">Ventas de hoy</div>
-      <div class="stat-value">{{ ventas_hoy.num }}</div>
+      <div class="stat-label">Por cobrar (fiado)</div>
+      <div class="stat-value">${{ '%.2f'|format(por_cobrar) }}</div>
+      <div class="stat-meta"><a href="{{ url_for('clientes') }}">Ver clientes</a></div>
     </div>
   </div>
   <div class="col-sm-6 col-lg-3">
     <div class="card stat">
-      <div class="stat-label">Facturado hoy</div>
-      <div class="stat-value">${{ '%.2f'|format(ventas_hoy.total) }}</div>
+      <div class="stat-label">Inventario a costo</div>
+      <div class="stat-value">${{ '%.2f'|format(inventario.costo) }}</div>
+      <div class="stat-meta">A precio de venta: <b>${{ '%.2f'|format(inventario.venta) }}</b></div>
     </div>
   </div>
   <div class="col-sm-6 col-lg-3">
     <div class="card stat">
-      <div class="stat-label">Ganancia hoy</div>
-      <div class="stat-value text-success">${{ '%.2f'|format(ventas_hoy.ganancia) }}</div>
+      <div class="stat-label">Descuentos otorgados</div>
+      <div class="stat-value">${{ '%.2f'|format(resumen.descuentos) }}</div>
     </div>
   </div>
   <div class="col-sm-6 col-lg-3">
     <div class="card stat">
       <div class="stat-label">Productos en stock bajo</div>
       <div class="stat-value {{ 'text-danger' if stock_bajo }}">{{ stock_bajo|length }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><h2 class="card-title-sm">Ventas por día</h2></div>
+  <div class="card-body">
+    {% if dias %}
+    <div class="grafico" role="img" aria-label="Gráfico de ventas por día">
+      {% for d in dias %}
+        <div class="barra-col" title="{{ d.dia }}: ${{ '%.2f'|format(d.total) }} en {{ d.num }} ventas (ganancia ${{ '%.2f'|format(d.ganancia or 0) }})">
+          <span class="barra-valor">${{ '%.0f'|format(d.total) }}</span>
+          <div class="barra" style="height:{{ d.pct }}%"></div>
+          <span class="barra-dia">{{ d.corto }}</span>
+        </div>
+      {% endfor %}
+    </div>
+    {% else %}
+      <p class="empty mb-0">No hay ventas en este período.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title-sm">Cobrado por método de pago</h2></div>
+      <div class="card-body pt-2">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>Método</th><th class="text-end">Pagos</th><th class="text-end">Monto</th></tr></thead>
+            <tbody>
+              {% for m in metodos %}
+              <tr>
+                <td class="fw-medium">{{ METODOS_PAGO.get(m.metodo, m.metodo) }}</td>
+                <td class="text-end num text-muted">{{ m.num }}</td>
+                <td class="text-end num">${{ '%.2f'|format(m.total) }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3" class="empty">Sin datos</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title-sm">Ventas por categoría</h2></div>
+      <div class="card-body pt-2">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>Categoría</th><th class="text-end">Total</th><th class="text-end">Ganancia</th></tr></thead>
+            <tbody>
+              {% for c in categorias %}
+              <tr>
+                <td class="fw-medium">{{ c.nombre }}</td>
+                <td class="text-end num">${{ '%.2f'|format(c.total) }}</td>
+                <td class="text-end num text-success">${{ '%.2f'|format(c.ganancia or 0) }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3" class="empty">Sin datos</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>

@@ -31,10 +31,17 @@
       {% endwith %}
 
       <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label" for="negocio">Código del negocio</label>
+          <input type="text" name="negocio" id="negocio" class="form-control" value="{{ negocio_codigo or '' }}"
+                 placeholder="ej. bodega-la-esquina" required autocomplete="organization"
+                 autocapitalize="none" spellcheck="false" maxlength="30">
+        </div>
         <div class="mb-3">
           <label class="form-label" for="usuario">Usuario</label>
           <input type="text" name="usuario" id="usuario" class="form-control"
-                 placeholder="tu usuario" required autofocus autocomplete="username">
+                 placeholder="tu usuario" required autocomplete="username" autocapitalize="none">
         </div>
         <div class="mb-4">
           <label class="form-label" for="password">Contraseña</label>
@@ -48,15 +55,31 @@
         </div>
         <button class="btn btn-primary w-100 btn-lg">Entrar</button>
       </form>
-
-      <p class="login-hint mb-0">
-        Usuario por defecto: <code>admin</code> / <code>admin123</code>
-      </p>
+      {% if REGISTRO_PUBLICO %}
+        <p class="text-center small text-muted mt-4 mb-0">¿Aún no tienes cuenta? <a href="{{ url_for('registro') }}">Crea tu negocio</a></p>
+      {% endif %}
     </div>
   </div>
 </div>
 
 <script>
+// El código del negocio se recuerda en este dispositivo (y el cursor va al primer campo vacío)
+(function () {
+    const campo = document.getElementById('negocio');
+    try {
+        if (!campo.value) campo.value = localStorage.getItem('vendiya_negocio') || '';
+        document.querySelector('form').addEventListener('submit', () => {
+            localStorage.setItem('vendiya_negocio', campo.value.trim().toLowerCase());
+        });
+    } catch (e) { /* sin almacenamiento */ }
+    (campo.value ? document.getElementById('usuario') : campo).focus();
+
+    // Otra cuenta puede entrar en este dispositivo: se descartan las páginas guardadas de la anterior
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'LIMPIAR_CACHE' });
+    }
+})();
+
 function togglePass() {
     const input = document.getElementById('password');
     const icon = document.getElementById('eyeIcon');

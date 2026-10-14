@@ -1,34 +1,69 @@
 {% extends "base.html" %}
 {% block title %}VendiYA - Productos{% endblock %}
 {% block content %}
+{% set activos = productos|selectattr('activo')|list %}
 <div class="page-header">
   <div>
     <h1>Productos</h1>
-    <p>{{ productos|length }} productos en catálogo</p>
+    <p>{{ activos|length }} productos activos en el catálogo</p>
   </div>
-  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalProducto">
-    <i class="bi bi-plus-lg"></i> Nuevo producto
-  </button>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-light" href="{{ url_for('exportar_productos') }}"><i class="bi bi-download"></i> Exportar</a>
+    <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#modalCategorias">
+      <i class="bi bi-tags"></i> Categorías
+    </button>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalProducto">
+      <i class="bi bi-plus-lg"></i> Nuevo producto
+    </button>
+  </div>
+</div>
+
+<!-- Filtros -->
+<div class="row g-2 align-items-center mb-3">
+  <div class="col-md-5">
+    <div class="search">
+      <i class="bi bi-search"></i>
+      <input type="text" id="filtro_texto" class="form-control" placeholder="Buscar por nombre o código" autocomplete="off">
+    </div>
+  </div>
+  <div class="col-md-3">
+    <select id="filtro_categoria" class="form-select">
+      <option value="">Todas las categorías</option>
+      {% for c in categorias %}<option value="{{ c.id }}">{{ c.nombre }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-4 d-flex gap-3 flex-wrap">
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="filtro_bajo">
+      <label class="form-check-label" for="filtro_bajo">Stock bajo</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="filtro_inactivos">
+      <label class="form-check-label" for="filtro_inactivos">Mostrar inactivos</label></div>
+  </div>
 </div>
 
 <div class="table-card">
 <div class="table-responsive">
-<table class="table table-hover">
+<table class="table table-hover" id="tabla_productos">
   <thead>
     <tr><th>Código</th><th>Nombre</th><th>Categoría</th><th class="text-end">P. Compra</th>
-        <th class="text-end">P. Venta</th><th class="text-center">Stock</th><th class="text-end">Mín.</th>
-        <th class="text-end">IVA %</th><th></th></tr>
+        <th class="text-end">P. Venta</th><th class="text-end">Margen</th><th class="text-center">Stock</th>
+        <th class="text-end">Mín.</th><th class="text-end">IVA %</th><th></th></tr>
   </thead>
 <tbody>
   {% for p in productos %}
-  <tr>
+  {% set bajo = p.stock_actual <= p.stock_minimo %}
+  <tr class="{{ 'fila-inactiva' if not p.activo }}"
+      data-activo="{{ p.activo }}" data-bajo="{{ 1 if bajo else 0 }}" data-categoria="{{ p.categoria_id or '' }}"
+      data-texto="{{ (p.nombre ~ ' ' ~ (p.codigo_barras or ''))|lower }}">
     <td class="text-muted num">{{ p.codigo_barras or '—' }}</td>
-    <td class="fw-medium">{{ p.nombre }}</td>
+    <td class="fw-medium">{{ p.nombre }}{% if not p.activo %} <span class="badge pill-neutral">Inactivo</span>{% endif %}</td>
     <td class="text-muted">{{ p.categoria or '—' }}</td>
     <td class="text-end num">${{ '%.2f'|format(p.precio_compra) }}</td>
     <td class="text-end num">${{ '%.2f'|format(p.precio_venta) }}</td>
+    <td class="text-end num {{ 'text-danger' if p.precio_venta < p.precio_compra else 'text-muted' }}">
+      {% if p.precio_venta > 0 %}{{ '%.0f'|format((p.precio_venta - p.precio_compra) / p.precio_venta * 100) }}%{% else %}—{% endif %}
+    </td>
     <td class="text-center">
-      {% if p.stock_actual <= p.stock_minimo %}
+      {% if bajo %}
         <span class="badge bg-danger num">{{ p.stock_actual }}</span>
       {% else %}
         <span class="badge bg-success num">{{ p.stock_actual }}</span>
@@ -37,7 +72,7 @@
     <td class="text-end text-muted num">{{ p.stock_minimo }}</td>
     <td class="text-end text-muted num">{{ p.iva }}</td>
     <td class="text-end text-nowrap">
-      <button class="btn-icon btn-editar" title="Editar"
+      <button class="btn-icon btn-editar" title="Editar" type="button"
               data-id="{{ p.id }}"
               data-codigo="{{ p.codigo_barras or '' }}"
               data-nombre="{{ p.nombre }}"
@@ -47,33 +82,45 @@
               data-sm="{{ p.stock_minimo }}"
               data-um="{{ p.unidad_medida }}"
               data-iva="{{ p.iva }}"><i class="bi bi-pencil"></i></button>
-      <a class="btn-icon danger" title="Desactivar"
-         href="{{ url_for('eliminar_producto', pid=p.id) }}"
-         onclick="return confirm('¿Desactivar producto?')"><i class="bi bi-trash3"></i></a>
+      {% if p.activo %}
+      <form method="POST" action="{{ url_for('cambiar_estado_producto', pid=p.id, accion='desactivar') }}" class="d-inline"
+            data-confirm="«{{ p.nombre }}» dejará de aparecer en el punto de venta. Su historial se conserva."
+            data-confirm-titulo="¿Desactivar producto?" data-confirm-ok="Desactivar">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn-icon danger" title="Desactivar" type="submit"><i class="bi bi-trash3"></i></button>
+      </form>
+      {% else %}
+      <form method="POST" action="{{ url_for('cambiar_estado_producto', pid=p.id, accion='reactivar') }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-light" type="submit">Reactivar</button>
+      </form>
+      {% endif %}
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="9" class="empty">Aún no hay productos. Crea el primero con «Nuevo producto».</td></tr>
+  <tr><td colspan="10" class="empty">Aún no hay productos. Crea el primero con «Nuevo producto».</td></tr>
   {% endfor %}
+  <tr id="sin_resultados" style="display:none"><td colspan="10" class="empty">Ningún producto coincide con los filtros.</td></tr>
 </tbody>
 </table>
 </div>
 </div>
 
-<!-- Modal -->
-<div class="modal fade" id="modalProducto">
+<!-- Modal producto -->
+<div class="modal fade" id="modalProducto" tabindex="-1">
   <div class="modal-dialog">
     <form method="POST" action="{{ url_for('guardar_producto') }}" class="modal-content">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="modal-header">
-        <h5 class="modal-title">Producto</h5>
+        <h5 class="modal-title" id="tituloProducto">Producto</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <input type="hidden" name="id" id="f_id">
         <div class="mb-3"><label>Código de barras</label>
-          <input name="codigo_barras" id="f_codigo" class="form-control"></div>
+          <input name="codigo_barras" id="f_codigo" class="form-control" autocomplete="off"></div>
         <div class="mb-3"><label>Nombre</label>
-          <input name="nombre" id="f_nombre" class="form-control" required></div>
+          <input name="nombre" id="f_nombre" class="form-control" required maxlength="120"></div>
         <div class="mb-3"><label>Categoría</label>
           <select name="categoria_id" id="f_categoria" class="form-select">
             <option value="">-- Sin categoría --</option>
@@ -82,54 +129,120 @@
             {% endfor %}
           </select></div>
         <div class="row">
-          <div class="col mb-3"><label>Precio compra</label>
-            <input name="precio_compra" id="f_pc" type="number" step="0.01" class="form-control" value="0"></div>
-          <div class="col mb-3"><label>Precio venta</label>
-            <input name="precio_venta" id="f_pv" type="number" step="0.01" class="form-control" required></div>
+          <div class="col mb-3"><label>Precio compra ($)</label>
+            <input name="precio_compra" id="f_pc" type="number" step="0.01" min="0" class="form-control" value="0"></div>
+          <div class="col mb-3"><label>Precio venta ($)</label>
+            <input name="precio_venta" id="f_pv" type="number" step="0.01" min="0" class="form-control" required></div>
         </div>
         <div class="row">
           <div class="col mb-3"><label>Stock mínimo</label>
-            <input name="stock_minimo" id="f_sm" type="number" step="0.01" class="form-control" value="0"></div>
+            <input name="stock_minimo" id="f_sm" type="number" step="0.01" min="0" class="form-control" value="0"></div>
           <div class="col mb-3"><label>Unidad</label>
-            <input name="unidad_medida" id="f_um" class="form-control" value="unidad"></div>
+            <input name="unidad_medida" id="f_um" class="form-control" value="unidad" list="unidades"></div>
           <div class="col mb-3"><label>IVA %</label>
-            <input name="iva" id="f_iva" type="number" step="0.01" class="form-control" value="0"></div>
+            <input name="iva" id="f_iva" type="number" step="0.01" min="0" max="100" class="form-control" value="0"></div>
+        </div>
+        <datalist id="unidades"><option value="unidad"><option value="kg"><option value="g"><option value="litro"><option value="paquete"><option value="caja"></datalist>
+        <div class="mb-1" id="grupo_stock_inicial"><label>Stock inicial</label>
+          <input name="stock_inicial" id="f_stock" type="number" step="0.01" min="0" class="form-control" value="0">
+          <div class="form-text">Para cambiar el stock de un producto existente usa Inventario.</div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-        <button class="btn btn-primary">Guardar</button>
+        <button class="btn btn-primary" type="submit">Guardar</button>
       </div>
     </form>
   </div>
 </div>
 
+<!-- Modal categorías -->
+<div class="modal fade" id="modalCategorias" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Categorías</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="list-group list-group-flush mb-3">
+          {% for c in categorias %}
+          <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+            <span>{{ c.nombre }} <small class="text-muted">· {{ c.num_productos }} producto(s)</small></span>
+            {% if c.num_productos == 0 %}
+            <form method="POST" action="{{ url_for('eliminar_categoria', cid=c.id) }}" class="m-0"
+                  data-confirm="Se eliminará la categoría «{{ c.nombre }}»." data-confirm-ok="Eliminar">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn-icon danger" title="Eliminar" type="submit"><i class="bi bi-trash3"></i></button>
+            </form>
+            {% endif %}
+          </li>
+          {% else %}
+          <li class="list-group-item px-0 text-muted">Aún no hay categorías.</li>
+          {% endfor %}
+        </ul>
+        <form method="POST" action="{{ url_for('guardar_categoria') }}" class="input-group">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input name="nombre" class="form-control" placeholder="Nueva categoría" required maxlength="60">
+          <button class="btn btn-primary" type="submit">Agregar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+const $f = (id) => document.getElementById(id);
+
+// ---- Nuevo producto: formulario limpio ----
 document.querySelector('[data-bs-target="#modalProducto"]').addEventListener('click', () => {
-    document.getElementById('f_id').value = '';
-    document.getElementById('f_codigo').value = '';
-    document.getElementById('f_nombre').value = '';
-    document.getElementById('f_categoria').value = '';
-    document.getElementById('f_pc').value = '0';
-    document.getElementById('f_pv').value = '';
-    document.getElementById('f_sm').value = '0';
-    document.getElementById('f_um').value = 'unidad';
-    document.getElementById('f_iva').value = '0';
+    $f('tituloProducto').textContent = 'Nuevo producto';
+    ['f_id', 'f_codigo', 'f_nombre', 'f_categoria', 'f_pv'].forEach(id => $f(id).value = '');
+    $f('f_pc').value = '0';
+    $f('f_sm').value = '0';
+    $f('f_um').value = 'unidad';
+    $f('f_iva').value = '0';
+    $f('f_stock').value = '0';
+    $f('grupo_stock_inicial').style.display = '';
 });
 
+// ---- Editar producto ----
 document.querySelectorAll('.btn-editar').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.getElementById('f_id').value        = btn.dataset.id;
-        document.getElementById('f_codigo').value    = btn.dataset.codigo;
-        document.getElementById('f_nombre').value    = btn.dataset.nombre;
-        document.getElementById('f_categoria').value = btn.dataset.categoria;
-        document.getElementById('f_pc').value        = btn.dataset.pc;
-        document.getElementById('f_pv').value        = btn.dataset.pv;
-        document.getElementById('f_sm').value        = btn.dataset.sm;
-        document.getElementById('f_um').value        = btn.dataset.um;
-        document.getElementById('f_iva').value       = btn.dataset.iva;
-        new bootstrap.Modal(document.getElementById('modalProducto')).show();
+        $f('tituloProducto').textContent = 'Editar producto';
+        $f('f_id').value        = btn.dataset.id;
+        $f('f_codigo').value    = btn.dataset.codigo;
+        $f('f_nombre').value    = btn.dataset.nombre;
+        $f('f_categoria').value = btn.dataset.categoria;
+        $f('f_pc').value        = btn.dataset.pc;
+        $f('f_pv').value        = btn.dataset.pv;
+        $f('f_sm').value        = btn.dataset.sm;
+        $f('f_um').value        = btn.dataset.um;
+        $f('f_iva').value       = btn.dataset.iva;
+        $f('grupo_stock_inicial').style.display = 'none';
+        bootstrap.Modal.getOrCreateInstance($f('modalProducto')).show();
     });
 });
+
+// ---- Filtros de la tabla ----
+function filtrar() {
+    const texto = $f('filtro_texto').value.trim().toLowerCase();
+    const cat = $f('filtro_categoria').value;
+    const soloBajo = $f('filtro_bajo').checked;
+    const verInactivos = $f('filtro_inactivos').checked;
+    let visibles = 0;
+    document.querySelectorAll('#tabla_productos tbody tr[data-texto]').forEach(tr => {
+        const ok = (!texto || tr.dataset.texto.includes(texto))
+            && (!cat || tr.dataset.categoria === cat)
+            && (!soloBajo || tr.dataset.bajo === '1')
+            && (verInactivos || tr.dataset.activo === '1');
+        tr.style.display = ok ? '' : 'none';
+        if (ok) visibles++;
+    });
+    $f('sin_resultados').style.display = visibles ? 'none' : '';
+}
+['filtro_texto', 'filtro_categoria', 'filtro_bajo', 'filtro_inactivos'].forEach(id =>
+    $f(id).addEventListener('input', filtrar));
+filtrar();
 </script>
 {% endblock %}

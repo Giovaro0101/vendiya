@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket {{ venta.numero_factura }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px; background: #eee; font: 13px/1.35 "Courier New", monospace; color: #000; }
+    .ticket { width: 302px; max-width: 100%; margin: 0 auto; background: #fff; padding: 14px 12px; }
+    h1 { font-size: 15px; margin: 0 0 2px; text-align: center; }
+    .centro { text-align: center; }
+    .muted { color: #444; font-size: 12px; }
+    hr { border: 0; border-top: 1px dashed #000; margin: 8px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { vertical-align: top; padding: 1px 0; }
+    td.der { text-align: right; white-space: nowrap; padding-left: 6px; }
+    .total td { font-weight: bold; font-size: 15px; }
+    .anulada { text-align: center; font-weight: bold; border: 2px solid #000; margin: 6px 0; padding: 3px; }
+    .acciones { text-align: center; margin: 14px 0 0; }
+    .acciones button { font: inherit; padding: 6px 14px; cursor: pointer; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .ticket { width: 100%; padding: 0; }
+      .acciones { display: none; }
+      @page { margin: 4mm; }
+    }
+  </style>
+</head>
+<body>
+<div class="ticket">
+  <h1>{{ negocio.nombre_negocio }}</h1>
+  <div class="centro muted">
+    {% if negocio.rif %}RIF: {{ negocio.rif }}<br>{% endif %}
+    {% if negocio.direccion %}{{ negocio.direccion }}<br>{% endif %}
+    {% if negocio.telefono %}Tel: {{ negocio.telefono }}{% endif %}
+  </div>
+  <hr>
+  <div>Factura: {{ venta.numero_factura }}</div>
+  <div>Fecha: {{ venta.fecha }}</div>
+  {% if venta.usuario %}<div>Atendió: {{ venta.usuario }}</div>{% endif %}
+  {% if venta.cliente %}<div>Cliente: {{ venta.cliente }}</div>{% endif %}
+  {% if venta.estado == 'anulada' %}<div class="anulada">*** ANULADA ***</div>{% endif %}
+  <hr>
+  <table>
+    {% for d in detalle %}
+    <tr><td colspan="2">{{ d.nombre }}</td></tr>
+    <tr><td class="muted">{{ d.cantidad }} x ${{ '%.2f'|format(d.precio_unitario) }}</td><td class="der">${{ '%.2f'|format(d.subtotal) }}</td></tr>
+    {% endfor %}
+  </table>
+  <hr>
+  <table>
+    <tr><td>Subtotal</td><td class="der">${{ '%.2f'|format(venta.subtotal) }}</td></tr>
+    {% if venta.descuento %}<tr><td>Descuento</td><td class="der">-${{ '%.2f'|format(venta.descuento) }}</td></tr>{% endif %}
+    {% if venta.iva %}<tr><td>IVA</td><td class="der">${{ '%.2f'|format(venta.iva) }}</td></tr>{% endif %}
+    <tr class="total"><td>TOTAL</td><td class="der">${{ '%.2f'|format(venta.total) }}</td></tr>
+    {% if venta.tasa %}<tr><td class="muted">Total en Bs (tasa {{ '%.2f'|format(venta.tasa) }})</td><td class="der">{{ '%.2f'|format(venta.total * venta.tasa) }} Bs</td></tr>{% endif %}
+  </table>
+  <hr>
+  <table>
+    {% for p in pagos %}
+    <tr><td>{{ METODOS_PAGO.get(p.metodo, p.metodo) }}</td><td class="der">${{ '%.2f'|format(p.monto) }}</td></tr>
+    {% endfor %}
+    {% if venta.cambio %}<tr><td>Cambio</td><td class="der">${{ '%.2f'|format(venta.cambio) }}</td></tr>{% endif %}
+    {% if venta.deuda and venta.deuda > 0 %}<tr><td>Queda a crédito</td><td class="der">${{ '%.2f'|format(venta.deuda) }}</td></tr>{% endif %}
+  </table>
+  <hr>
+  <div class="centro">{{ negocio.mensaje_ticket or '¡Gracias por su compra!' }}</div>
+
+  <div class="acciones">
+    <button onclick="window.print()">Imprimir</button>
+    <button onclick="window.close()">Cerrar</button>
+  </div>
+</div>
+{% if imprimir %}<script>window.addEventListener('load', () => setTimeout(() => window.print(), 300));</script>{% endif %}
+</body>
+</html>

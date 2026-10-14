@@ -4,21 +4,61 @@
 <div class="page-header">
   <div>
     <h1>Ventas</h1>
-    <p>Historial de facturas emitidas.</p>
+    <p>{% if es_admin %}Historial de facturas emitidas.{% else %}Ventas de hoy.{% endif %}</p>
   </div>
+  {% if es_admin %}
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-light" href="{{ url_for('exportar_ventas', desde=r.desde, hasta=r.hasta) }}"><i class="bi bi-download"></i> Exportar CSV</a>
+    <form method="POST" action="{{ url_for('admin_archivar') }}" class="m-0"
+          data-confirm="Las ventas de más de 15 días se mueven al archivo histórico. Siguen apareciendo en reportes y búsquedas."
+          data-confirm-titulo="¿Archivar ventas antiguas?" data-confirm-ok="Archivar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-light" type="submit"><i class="bi bi-archive"></i> Archivar antiguas</button>
+    </form>
+  </div>
+  {% endif %}
 </div>
+
+{% if es_admin %}
+<form method="GET" class="filtros mb-4">
+  <div class="btn-group" role="group" aria-label="Rango">
+    {% for clave, texto in [('hoy', 'Hoy'), ('semana', '7 días'), ('mes', 'Este mes'), ('todo', 'Todo')] %}
+      <a class="btn btn-sm {{ 'btn-primary' if r.rango == clave else 'btn-light' }}"
+         href="{{ url_for('ventas', rango=clave, q=q or None) }}">{{ texto }}</a>
+    {% endfor %}
+  </div>
+  <input type="date" name="desde" value="{{ r.desde }}" class="form-control form-control-sm" aria-label="Desde">
+  <input type="date" name="hasta" value="{{ r.hasta }}" class="form-control form-control-sm" aria-label="Hasta">
+  <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Factura o cliente" style="max-width:200px">
+  <button class="btn btn-sm btn-light" type="submit">Filtrar</button>
+</form>
+{% endif %}
 
 <div class="row g-3 mb-4">
   <div class="col-sm-6 col-lg-3">
     <div class="card stat">
-      <div class="stat-label">Total facturado</div>
-      <div class="stat-value">${{ '%.2f'|format(totales.total or 0) }}</div>
+      <div class="stat-label">Ventas</div>
+      <div class="stat-value">{{ totales.n }}</div>
     </div>
   </div>
   <div class="col-sm-6 col-lg-3">
     <div class="card stat">
-      <div class="stat-label">Ganancia total</div>
-      <div class="stat-value text-success">${{ '%.2f'|format(totales.ganancia or 0) }}</div>
+      <div class="stat-label">Facturado</div>
+      <div class="stat-value">${{ '%.2f'|format(totales.total) }}</div>
+    </div>
+  </div>
+  {% if es_admin %}
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Ganancia</div>
+      <div class="stat-value text-success">${{ '%.2f'|format(totales.ganancia) }}</div>
+    </div>
+  </div>
+  {% endif %}
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Fiado en este período</div>
+      <div class="stat-value">${{ '%.2f'|format(totales.deuda) }}</div>
     </div>
   </div>
 </div>
@@ -31,32 +71,35 @@
       <th>Factura</th>
       <th>Fecha</th>
       <th>Usuario</th>
-      <th class="text-end">Subtotal</th>
-      <th class="text-end">IVA</th>
+      <th>Cliente</th>
       <th class="text-end">Total</th>
-      <th class="text-end">Ganancia</th>
+      {% if es_admin %}<th class="text-end">Ganancia</th>{% endif %}
       <th>Pago</th>
       <th></th>
     </tr>
   </thead>
   <tbody>
     {% for v in ventas %}
-    <tr>
-      <td class="fw-medium num">{{ v.numero_factura }}</td>
+    <tr class="{{ 'fila-inactiva' if v.estado == 'anulada' }}">
+      <td class="fw-medium num">{{ v.numero_factura }}{% if v.archivado %} <span class="badge pill-neutral">archivada</span>{% endif %}</td>
       <td class="text-muted num">{{ v.fecha }}</td>
       <td class="text-muted">{{ v.usuario or '—' }}</td>
-      <td class="text-end num">${{ '%.2f'|format(v.subtotal) }}</td>
-      <td class="text-end num text-muted">${{ '%.2f'|format(v.iva) }}</td>
+      <td class="text-muted">{{ v.cliente or '—' }}</td>
       <td class="text-end num fw-semibold">${{ '%.2f'|format(v.total) }}</td>
-      <td class="text-end num text-success">${{ '%.2f'|format(v.ganancia or 0) }}</td>
-      <td><span class="badge pill-neutral">{{ v.forma_pago }}</span></td>
-      <td class="text-end"><a class="btn btn-sm btn-light" href="{{ url_for('ver_venta', vid=v.id) }}">Ver</a></td>
+      {% if es_admin %}<td class="text-end num text-success">${{ '%.2f'|format(v.ganancia or 0) }}</td>{% endif %}
+      <td>
+        {% if v.estado == 'anulada' %}<span class="badge bg-danger">Anulada</span>
+        {% elif v.deuda and v.deuda > 0 %}<span class="badge bg-warning">Fiado · debe ${{ '%.2f'|format(v.deuda) }}</span>
+        {% else %}<span class="badge pill-neutral">{{ METODOS_PAGO.get(v.forma_pago, v.forma_pago) }}</span>{% endif %}
+      </td>
+      <td class="text-end"><a class="btn btn-sm btn-light" href="{{ url_for('ver_venta', vid=v.id, arch=1 if v.archivado else None) }}">Ver</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="9" class="empty">Todavía no hay ventas registradas.</td></tr>
+    <tr><td colspan="8" class="empty">No hay ventas en este período.</td></tr>
     {% endfor %}
   </tbody>
 </table>
 </div>
 </div>
+{% if limitado %}<p class="text-muted small mt-2">Se muestran las 500 ventas más recientes; acota el rango de fechas para ver otras.</p>{% endif %}
 {% endblock %}

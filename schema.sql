@@ -1,3 +1,7 @@
+-- Esquema base de VendiYA.
+-- Las columnas y tablas añadidas después (clientes, cajas, gastos, etc.) las crea
+-- database.migrar(), que funciona igual en instalaciones nuevas y en bases antiguas.
+
 CREATE TABLE IF NOT EXISTS categorias (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL UNIQUE
@@ -37,6 +41,7 @@ CREATE TABLE IF NOT EXISTS ventas (
     forma_pago TEXT NOT NULL,
     monto_recibido REAL,
     cambio REAL,
+    ganancia REAL DEFAULT 0,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );
 
@@ -47,8 +52,18 @@ CREATE TABLE IF NOT EXISTS venta_detalle (
     cantidad REAL NOT NULL,
     precio_unitario REAL NOT NULL,
     subtotal REAL NOT NULL,
+    precio_compra REAL DEFAULT 0,
+    ganancia REAL DEFAULT 0,
     FOREIGN KEY (venta_id) REFERENCES ventas(id),
     FOREIGN KEY (producto_id) REFERENCES productos(id)
+);
+
+CREATE TABLE IF NOT EXISTS venta_pagos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    venta_id INTEGER NOT NULL,
+    metodo TEXT NOT NULL,
+    monto REAL NOT NULL,
+    FOREIGN KEY (venta_id) REFERENCES ventas(id)
 );
 
 CREATE TABLE IF NOT EXISTS movimientos (
