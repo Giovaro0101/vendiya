@@ -1,50 +1,103 @@
 {% extends "base.html" %}
-{% block title %}Reportes{% endblock %}
+{% block title %}VendiYA - Reportes{% endblock %}
 {% block content %}
-<h2>Reportes</h2>
+<div class="page-header">
+  <div>
+    <h1>Reportes</h1>
+    <p>Resumen del día y estado del inventario.</p>
+  </div>
+</div>
 
-<div class="row mb-3">
-  <div class="col-md-4">
-    <div class="card bg-primary text-white">
-      <div class="card-body">
-        <h6>Ventas de hoy</h6>
-        <h2>{{ ventas_hoy.num }}</h2>
-        <p class="mb-0">Total: ${{ '%.2f'|format(ventas_hoy.total) }}</p>
-      </div>
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Ventas de hoy</div>
+      <div class="stat-value">{{ ventas_hoy.num }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Facturado hoy</div>
+      <div class="stat-value">${{ '%.2f'|format(ventas_hoy.total) }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Ganancia hoy</div>
+      <div class="stat-value text-success">${{ '%.2f'|format(ventas_hoy.ganancia) }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat">
+      <div class="stat-label">Productos en stock bajo</div>
+      <div class="stat-value {{ 'text-danger' if stock_bajo }}">{{ stock_bajo|length }}</div>
     </div>
   </div>
 </div>
 
-<div class="row">
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header"><b>Top 10 productos más vendidos</b></div>
-      <div class="card-body">
-        <table class="table table-sm">
-          <thead><tr><th>Producto</th><th>Cantidad</th><th>Total $</th></tr></thead>
-          <tbody>
-            {% for p in top_productos %}
-            <tr><td>{{ p.nombre }}</td><td>{{ p.cantidad }}</td>
-                <td>${{ '%.2f'|format(p.total) }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title-sm">Productos más vendidos</h2></div>
+      <div class="card-body pt-2">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th class="text-end">Cantidad</th>
+                <th class="text-end">Total</th>
+                <th class="text-end">Ganancia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in top_productos %}
+              <tr>
+                <td class="fw-medium">{{ p.nombre }}</td>
+                <td class="text-end num">{{ p.cantidad }}</td>
+                <td class="text-end num">${{ '%.2f'|format(p.total) }}</td>
+                <td class="text-end num text-success">${{ '%.2f'|format(p.ganancia or 0) }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="empty">Sin ventas registradas</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header bg-warning"><b>⚠ Stock bajo mínimo</b></div>
-      <div class="card-body">
-        <table class="table table-sm">
-          <thead><tr><th>Producto</th><th>Stock</th><th>Mínimo</th></tr></thead>
-          <tbody>
-            {% for p in stock_bajo %}
-            <tr><td>{{ p.nombre }}</td><td class="text-danger">{{ p.stock_actual }}</td>
-                <td>{{ p.stock_minimo }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header">
+        <h2 class="card-title-sm">Stock bajo mínimo
+          {% if stock_bajo %}<span class="badge bg-danger">{{ stock_bajo|length }}</span>{% endif %}
+        </h2>
+      </div>
+      <div class="card-body pt-2">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th class="text-end">Stock</th>
+                <th class="text-end">Mínimo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in stock_bajo %}
+              <tr>
+                <td class="fw-medium">{{ p.nombre }}</td>
+                <td class="text-end num text-danger">{{ p.stock_actual }}</td>
+                <td class="text-end num text-muted">{{ p.stock_minimo }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3" class="empty">Todo el inventario está en orden</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

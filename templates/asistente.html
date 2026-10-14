@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}VendiYA - AsistenteIA{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Asistente</h1>
+    <p>Pregunta sobre tus ventas, productos, stock y ganancias.</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card overflow-hidden">
+      <div class="chat" id="chat">
+        <div class="chat-vacio" id="placeholder">
+          <div class="icono"><i class="bi bi-stars"></i></div>
+          <p class="fw-semibold text-body mb-1">¿En qué te ayudo hoy?</p>
+          <p class="small mb-0">Escribe una pregunta o elige una de las sugerencias.</p>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="input-group">
+          <input type="text" id="pregunta" class="form-control"
+                 placeholder="Escribe tu pregunta…" autofocus autocomplete="off">
+          <button class="btn btn-primary" onclick="enviar()" id="btn_enviar" aria-label="Enviar">
+            <i class="bi bi-arrow-up"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="stat-label">Sugerencias</div>
+    <div class="sugerencias">
+      <button class="btn" onclick="preguntar('¿Cuánto vendí hoy?')">¿Cuánto vendí hoy?</button>
+      <button class="btn" onclick="preguntar('¿Qué productos tienen stock bajo?')">¿Qué productos tienen stock bajo?</button>
+      <button class="btn" onclick="preguntar('¿Cuál es mi producto más vendido?')">Producto más vendido</button>
+      <button class="btn" onclick="preguntar('¿Cuánto gané esta semana?')">Ganancia de la semana</button>
+      <button class="btn" onclick="preguntar('¿Cuál es la tasa del BCV?')">Tasa del BCV</button>
+      <button class="btn" onclick="preguntar('¿Qué productos tienen mejor margen?')">Mejores márgenes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const input = document.getElementById('pregunta');
+const btn = document.getElementById('btn_enviar');
+
+input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') enviar();
+});
+
+async function enviar() {
+    const pregunta = input.value.trim();
+    if (!pregunta) return;
+    await preguntar(pregunta);
+    input.value = '';
+}
+
+async function preguntar(pregunta) {
+    const ph = document.getElementById('placeholder');
+    if (ph) ph.style.display = 'none';
+
+    agregarMensaje('Tú', pregunta, 'usuario');
+
+    input.disabled = true;
+    btn.disabled = true;
+    const idPensando = agregarMensaje('Asistente', '⏳ Pensando...', 'asistente');
+
+    try {
+        const res = await fetch('/api/asistente', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({pregunta})
+        });
+        const data = await res.json();
+
+        const burbuja = document.getElementById(idPensando);
+        if (data.ok) {
+            burbuja.innerHTML = `<b>Asistente:</b><br>${escapeHtml(data.respuesta).replace(/\n/g, '<br>')}`;
+        } else {
+            burbuja.innerHTML = `<b>Asistente:</b><br><span class="text-danger">❌ ${escapeHtml(data.error || 'Error desconocido')}</span>`;
+        }
+    } catch (err) {
+        const burbuja = document.getElementById(idPensando);
+        burbuja.innerHTML = `<b>Asistente:</b><br><span class="text-danger">❌ Error de red: ${err.message}</span>`;
+    } finally {
+        input.disabled = false;
+        btn.disabled = false;
+        input.focus();
+        chat.scrollTop = chat.scrollHeight;
+    }
+}
+
+let contador = 0;
+function agregarMensaje(quien, texto, tipo) {
+    contador++;
+    const id = 'msg_' + contador;
+    const bg = tipo === 'usuario' ? 'bg-primary text-white' : 'bg-white border';
+    const align = tipo === 'usuario' ? 'text-end' : 'text-start';
+    chat.innerHTML += `
+      <div class="${align} mb-2">
+        <div id="${id}" class="d-inline-block p-2 rounded ${bg}" style="max-width:80%; text-align:left;">
+          <b>${quien}:</b> ${escapeHtml(texto)}
+        </div>
+      </div>`;
+    chat.scrollTop = chat.scrollHeight;
+    return id;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

@@ -1,38 +1,66 @@
 {% extends "base.html" %}
-{% block title %}Venta{% endblock %}
+{% block title %}VendiYA - Venta{% endblock %}
 {% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('ventas') }}" class="text-muted small text-decoration-none"><i class="bi bi-arrow-left"></i> Ventas</a>
+    <h1 class="mt-1">Factura {{ venta.numero_factura }}</h1>
+    <p>{{ venta.fecha }} · <span class="badge pill-neutral">{{ venta.forma_pago }}</span></p>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-body">
-    <h4>Factura {{ venta.numero_factura }}</h4>
-    <p>Fecha: {{ venta.fecha }} | Pago: {{ venta.forma_pago }}</p>
-    <table class="table">
-      <thead><tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Subtotal</th><th>Ganancia</th></tr></thead>
-      <tbody>
-        {% for d in detalle %}
-        <tr><td>{{ d.nombre }}</td><td>{{ d.cantidad }}</td>
-            <td>${{ '%.2f'|format(d.precio_unitario) }}</td>
-            <td>${{ '%.2f'|format(d.subtotal) }}</td>
-            <td class="text-success">${{ '%.2f'|format(d.ganancia or 0) }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <div class="text-end">
-      <p>Subtotal: ${{ '%.2f'|format(venta.subtotal) }}</p>
-      <p>IVA: ${{ '%.2f'|format(venta.iva) }}</p>
-      <h4>Total: ${{ '%.2f'|format(venta.total) }}</h4>
-      <h5 class="text-success">Ganancia: ${{ '%.2f'|format(venta.ganancia or 0) }}</h5>
-      {% if venta.forma_pago == 'efectivo' %}
-        <p>Recibido: ${{ '%.2f'|format(venta.monto_recibido) }} | Cambio: ${{ '%.2f'|format(venta.cambio) }}</p>
-      {% endif %}
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th class="text-end">Cant.</th>
+            <th class="text-end">Precio</th>
+            <th class="text-end">Subtotal</th>
+            <th class="text-end">Ganancia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in detalle %}
+          <tr>
+            <td class="fw-medium">{{ d.nombre }}</td>
+            <td class="text-end num">{{ d.cantidad }}</td>
+            <td class="text-end num">${{ '%.2f'|format(d.precio_unitario) }}</td>
+            <td class="text-end num">${{ '%.2f'|format(d.subtotal) }}</td>
+            <td class="text-end num text-success">${{ '%.2f'|format(d.ganancia or 0) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
 
-    <hr>
-    <h5>Pagos:</h5>
-    <ul>
-      {% for p in pagos %}
-        <li>{{ p.metodo }}: ${{ '%.2f'|format(p.monto) }}</li>
-      {% endfor %}
-    </ul>
+    <div class="row mt-4 g-4">
+      <div class="col-md-6">
+        <div class="stat-label">Pagos</div>
+        <div class="totales" style="max-width:320px">
+          {% for p in pagos %}
+            <div class="fila"><span>{{ p.metodo }}</span><span>${{ '%.2f'|format(p.monto) }}</span></div>
+          {% endfor %}
+          {% if venta.forma_pago == 'efectivo' %}
+            <div class="fila"><span>Recibido</span><span>${{ '%.2f'|format(venta.monto_recibido) }}</span></div>
+            <div class="fila"><span>Cambio</span><span>${{ '%.2f'|format(venta.cambio) }}</span></div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="totales resumen">
+          <div class="fila"><span>Subtotal</span><span>${{ '%.2f'|format(venta.subtotal) }}</span></div>
+          <div class="fila"><span>IVA</span><span>${{ '%.2f'|format(venta.iva) }}</span></div>
+          <div class="fila"><span>Ganancia</span><span class="text-success">${{ '%.2f'|format(venta.ganancia or 0) }}</span></div>
+          <div class="total">
+            <span class="etiqueta">Total</span>
+            <span id="total">${{ '%.2f'|format(venta.total) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -1,14 +1,14 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from werkzeug.security import check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
-from database import get_db, init_db
+from database import get_db, get_archive_db, init_db, archivar_ventas_antiguas
 from flask_apscheduler import APScheduler
+from rag import preguntar as rag_preguntar
 import requests
 from bs4 import BeautifulSoup
 import urllib3
 
-# Silenciar advertencia de SSL del BCV (su certificado suele estar vencido)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
@@ -25,68 +25,49 @@ def login_required(f):
         return f(*args, **kwargs)
     return wrapper
 
-# ---------- Obtener tasa del BCV por scraping ----------
+# ---------- Tasa BCV ----------
 def obtener_tasa_bcv():
-    """Obtener la tasa oficial del dólar directamente del sitio web del BCV"""
     try:
         headers = {
             'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                            'AppleWebKit/537.36 (KHTML, like Gecko) '
                            'Chrome/120.0.0.0 Safari/537.36')
         }
-        response = requests.get(
-            "https://www.bcv.org.ve/",
-            headers=headers,
-            verify=False,
-            timeout=15
-        )
+        response = requests.get("https://www.bcv.org.ve/", headers=headers,
+                                verify=False, timeout=15)
         response.encoding = 'utf-8'
         soup = BeautifulSoup(response.text, 'html.parser')
-
-        # El BCV muestra la tasa en un div con id="dolar"
         dolar_div = soup.find("div", {"id": "dolar"})
         if not dolar_div:
-            print("No se encontró el div 'dolar' en la página del BCV")
+            print("No se encontró el div 'dolar' en el BCV")
             return None
-
         strong = dolar_div.find("strong")
         if not strong:
-            print("No se encontró el elemento <strong> dentro del div 'dolar'")
+            print("No se encontró <strong> dentro del div 'dolar'")
             return None
-
-        valor_text = strong.text.strip()
-        # Formato típico: "874,730000" -> limpiar y convertir
-        valor_text = valor_text.replace(".", "").replace(",", ".")
-        valor = float(valor_text)
-        return valor
+        valor_text = strong.text.strip().replace(".", "").replace(",", ".")
+        return float(valor_text)
     except Exception as e:
         print(f"Error al obtener la tasa de cambio: {e}")
         return None
 
 def actualizar_tasa_diaria():
-    """Actualizar diariamente la tasa del BCV y guardarla en la BD"""
     valor = obtener_tasa_bcv()
     if valor:
         conn = get_db()
         fecha = datetime.now().strftime("%Y-%m-%d")
-        # Eliminar registro previo de hoy y volver a insertar
         conn.execute("DELETE FROM tasa_cambio WHERE fecha = ?", (fecha,))
-        conn.execute(
-            "INSERT INTO tasa_cambio (fecha, valor, fuente) VALUES (?,?,?)",
-            (fecha, valor, 'BCV')
-        )
+        conn.execute("INSERT INTO tasa_cambio (fecha, valor, fuente) VALUES (?,?,?)",
+                     (fecha, valor, 'BCV'))
         conn.commit()
         conn.close()
         print(f"[{fecha}] Tasa de cambio actualizada: {valor} Bs/USD")
     else:
-        print("No se pudo obtener la tasa de cambio, se mantiene el valor anterior")
+        print("No se pudo obtener la tasa de cambio, se mantiene la anterior")
 
 def obtener_tasa_actual():
-    """Obtener la tasa más reciente desde la BD"""
     conn = get_db()
-    row = conn.execute(
-        "SELECT valor FROM tasa_cambio ORDER BY fecha DESC LIMIT 1"
-    ).fetchone()
+    row = conn.execute("SELECT valor FROM tasa_cambio ORDER BY fecha DESC LIMIT 1").fetchone()
     conn.close()
     return row['valor'] if row else None
 
@@ -364,39 +345,83 @@ def ajuste_inventario():
 @app.route('/ventas')
 @login_required
 def ventas():
+    rango = request.args.get('rango', 'hoy')
+
     conn = get_db()
-    lista = conn.execute("""
+    arch = get_archive_db()
+
+    hoy = datetime.now()
+    if rango == 'hoy':
+        desde = hoy.strftime("%Y-%m-%d 00:00:00")
+    elif rango == 'semana':
+        desde = (hoy - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")
+    elif rango == 'quincena':
+        desde = (hoy - timedelta(days=15)).strftime("%Y-%m-%d 00:00:00")
+    else:
+        desde = "1970-01-01 00:00:00"
+
+    ventas = conn.execute("""
         SELECT v.*, u.nombre as usuario FROM ventas v
         LEFT JOIN usuarios u ON v.usuario_id = u.id
-        ORDER BY v.id DESC LIMIT 100
-    """).fetchall()
+        WHERE v.fecha >= ?
+        ORDER BY v.id DESC LIMIT 500
+    """, (desde,)).fetchall()
 
-    totales = conn.execute("""
-        SELECT COALESCE(SUM(total),0) as total, COALESCE(SUM(ganancia),0) as ganancia
-        FROM ventas
-    """).fetchone()
+    ventas_arch = []
+    if rango in ('todas', 'quincena'):
+        ventas_arch = arch.execute("""
+            SELECT v.*, '(archivado)' as usuario FROM ventas v
+            WHERE v.fecha >= ?
+            ORDER BY v.id DESC LIMIT 500
+        """, (desde,)).fetchall()
+
+    todas = [dict(v) for v in ventas] + [dict(v) for v in ventas_arch]
+    todas.sort(key=lambda x: x['fecha'], reverse=True)
+
+    t1 = conn.execute("SELECT COALESCE(SUM(total),0) as t, COALESCE(SUM(ganancia),0) as g FROM ventas").fetchone()
+    t2 = arch.execute("SELECT COALESCE(SUM(total),0) as t, COALESCE(SUM(ganancia),0) as g FROM ventas").fetchone()
+    totales = {
+        'total': (t1['t'] or 0) + (t2['t'] or 0),
+        'ganancia': (t1['g'] or 0) + (t2['g'] or 0),
+        'num_principal': conn.execute("SELECT COUNT(*) as c FROM ventas").fetchone()['c'],
+        'num_archivo': arch.execute("SELECT COUNT(*) as c FROM ventas").fetchone()['c']
+    }
+
     conn.close()
+    arch.close()
+
     return render_template('ventas.html',
-                           ventas=[dict(v) for v in lista],
-                           totales=dict(totales))
+                           ventas=todas,
+                           totales=totales,
+                           rango=rango)
 
 @app.route('/ventas/<int:vid>')
 @login_required
 def ver_venta(vid):
     conn = get_db()
     venta = conn.execute("SELECT * FROM ventas WHERE id = ?", (vid,)).fetchone()
-    detalle = conn.execute("""
-        SELECT d.*, p.nombre FROM venta_detalle d
-        JOIN productos p ON d.producto_id = p.id
-        WHERE d.venta_id = ?
-    """, (vid,)).fetchall()
-    pagos = conn.execute("""
-        SELECT * FROM venta_pagos WHERE venta_id = ?
-    """, (vid,)).fetchall()
-    conn.close()
+    db = conn
     if not venta:
+        db = get_archive_db()
+        venta = db.execute("SELECT * FROM ventas WHERE id = ?", (vid,)).fetchone()
+
+    if not venta:
+        conn.close()
         flash("Venta no encontrada", "danger")
         return redirect(url_for('ventas'))
+
+    detalle = db.execute("""
+        SELECT d.*, COALESCE(p.nombre, 'Producto #' || d.producto_id) as nombre
+        FROM venta_detalle d
+        LEFT JOIN productos p ON d.producto_id = p.id
+        WHERE d.venta_id = ?
+    """, (vid,)).fetchall()
+    pagos = db.execute("SELECT * FROM venta_pagos WHERE venta_id = ?", (vid,)).fetchall()
+
+    conn.close()
+    if db is not conn:
+        db.close()
+
     return render_template('detalle_venta.html',
                            venta=dict(venta),
                            detalle=[dict(d) for d in detalle],
@@ -407,7 +432,9 @@ def ver_venta(vid):
 @login_required
 def reportes():
     conn = get_db()
+    arch = get_archive_db()
     hoy = datetime.now().strftime("%Y-%m-%d")
+
     ventas_hoy = conn.execute("""
         SELECT COUNT(*) as num,
                COALESCE(SUM(total),0) as total,
@@ -415,15 +442,35 @@ def reportes():
         FROM ventas WHERE date(fecha) = ?
     """, (hoy,)).fetchone()
 
-    top_productos = conn.execute("""
+    top1 = conn.execute("""
         SELECT p.nombre, SUM(d.cantidad) as cantidad,
-               SUM(d.subtotal) as total,
-               SUM(d.ganancia) as ganancia
+               SUM(d.subtotal) as total, SUM(d.ganancia) as ganancia
         FROM venta_detalle d
         JOIN productos p ON d.producto_id = p.id
         GROUP BY d.producto_id
-        ORDER BY cantidad DESC LIMIT 10
     """).fetchall()
+
+    top2 = arch.execute("""
+        SELECT 'Producto #' || d.producto_id as nombre,
+               SUM(d.cantidad) as cantidad,
+               SUM(d.subtotal) as total, SUM(d.ganancia) as ganancia
+        FROM venta_detalle d
+        GROUP BY d.producto_id
+    """).fetchall()
+
+    combinado = {}
+    for r in top1:
+        combinado[r['nombre']] = {'nombre': r['nombre'], 'cantidad': r['cantidad'],
+                                  'total': r['total'], 'ganancia': r['ganancia']}
+    for r in top2:
+        if r['nombre'] in combinado:
+            combinado[r['nombre']]['cantidad'] += r['cantidad']
+            combinado[r['nombre']]['total'] += r['total']
+            combinado[r['nombre']]['ganancia'] += r['ganancia']
+        else:
+            combinado[r['nombre']] = dict(r)
+
+    top_productos = sorted(combinado.values(), key=lambda x: x['cantidad'], reverse=True)[:10]
 
     stock_bajo = conn.execute("""
         SELECT nombre, stock_actual, stock_minimo FROM productos
@@ -432,28 +479,60 @@ def reportes():
     """).fetchall()
 
     conn.close()
+    arch.close()
+
     return render_template('reportes.html',
                            ventas_hoy=dict(ventas_hoy) if ventas_hoy else {'num':0,'total':0,'ganancia':0},
-                           top_productos=[dict(p) for p in top_productos],
+                           top_productos=top_productos,
                            stock_bajo=[dict(p) for p in stock_bajo])
+
+# ---------- Archivado manual ----------
+@app.route('/admin/archivar')
+@login_required
+def admin_archivar():
+    if session.get('rol') != 'admin':
+        flash("Solo admin puede archivar", "danger")
+        return redirect(url_for('ventas'))
+    n = archivar_ventas_antiguas(15)
+    flash(f"{n} ventas archivadas correctamente", "success")
+    return redirect(url_for('ventas'))
+
+# ---------- Asistente RAG ----------
+@app.route('/asistente')
+@login_required
+def asistente():
+    return render_template('asistente.html')
+
+@app.route('/api/asistente', methods=['POST'])
+@login_required
+def api_asistente():
+    data = request.get_json()
+    pregunta = data.get('pregunta', '').strip()
+    if not pregunta:
+        return jsonify({'ok': False, 'error': 'Pregunta vacía'}), 400
+    resultado = rag_preguntar(pregunta)
+    return jsonify(resultado)
 
 # ---------- Main ----------
 if __name__ == '__main__':
     init_db()
 
-    # Configurar scheduler
     scheduler.init_app(app)
     scheduler.add_job(
         id='actualizar_tasa',
         func=actualizar_tasa_diaria,
-        trigger='cron',
-        hour=8,
-        minute=0,
+        trigger='cron', hour=8, minute=0,
+        replace_existing=True
+    )
+    scheduler.add_job(
+        id='archivar_ventas',
+        func=archivar_ventas_antiguas,
+        trigger='cron', hour=2, minute=0,
+        kwargs={'dias': 15},
         replace_existing=True
     )
     scheduler.start()
 
-    # Actualizar la tasa una vez al arrancar
     actualizar_tasa_diaria()
 
     app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
