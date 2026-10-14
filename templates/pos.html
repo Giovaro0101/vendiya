@@ -115,7 +115,128 @@
   </div>
 </div>
 
+<!-- Contenedor de toasts (arriba a la derecha) -->
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer" style="z-index:1100"></div>
+
+<!-- Modal: venta registrada -->
+<div class="modal fade" id="modalVenta" tabindex="-1" aria-labelledby="modalVentaTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-center">
+      <div class="modal-body p-4 p-md-5">
+        <i class="bi bi-check-circle-fill text-success venta-check" aria-hidden="true"></i>
+        <h4 class="mt-2 mb-1" id="modalVentaTitulo">¡Venta registrada!</h4>
+        <p class="text-muted mb-4">Factura <b class="text-body fs-5" id="mv_factura"></b></p>
+
+        <ul class="list-group list-group-flush text-start mb-4">
+          <li class="list-group-item d-flex justify-content-between align-items-baseline px-0">
+            <span class="text-muted">Total</span>
+            <span class="text-end">
+              <b class="fs-5" id="mv_total"></b>
+              <small class="text-muted d-block" id="mv_total_bs"></small>
+            </span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-baseline px-0">
+            <span class="text-muted">Ganancia</span>
+            <b class="text-success" id="mv_ganancia"></b>
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-baseline px-0">
+            <span class="text-muted">Cambio</span>
+            <span class="text-end">
+              <b id="mv_cambio"></b>
+              <small class="text-muted d-block" id="mv_cambio_bs"></small>
+            </span>
+          </li>
+        </ul>
+
+        <button type="button" class="btn btn-primary btn-lg w-100" id="btnNuevaVenta">Nueva venta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Animación suave de los toasts (entrada y salida) */
+#toastContainer .toast {
+    opacity: 0;
+    transform: translateX(1.5rem);
+    transition: opacity .3s ease, transform .3s ease;
+}
+#toastContainer .toast.show { opacity: 1; transform: translateX(0); }
+#toastContainer .toast-naranja { background-color: #F97316; color: #fff; }
+@media (max-width: 575.98px) {
+    #toastContainer { width: 100%; }
+    #toastContainer .toast { width: 100%; max-width: none; }
+}
+
+/* Check del modal con pequeño "pop" */
+.venta-check { font-size: 4.5rem; line-height: 1; display: inline-block; }
+#modalVenta.show .venta-check { animation: ventaPop .45s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes ventaPop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+</style>
+
 <script>
+// ============ NOTIFICACIONES ============
+// tipo: 'exito' | 'error' | 'advertencia'
+const TOAST_TIPOS = {
+    exito:       { clase: 'text-bg-success',  icono: 'bi-check-circle-fill',        auto: 3500 },
+    error:       { clase: 'text-bg-danger',   icono: 'bi-x-circle-fill',            auto: 0 },     // no se cierra solo
+    advertencia: { clase: 'toast-naranja',    icono: 'bi-exclamation-triangle-fill', auto: 7000 }
+};
+
+function mostrarToast(mensaje, tipo = 'error') {
+    const cfg = TOAST_TIPOS[tipo] || TOAST_TIPOS.error;
+
+    const el = document.createElement('div');
+    el.className = `toast align-items-center border-0 ${cfg.clase}`;
+    el.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
+    el.setAttribute('aria-live', tipo === 'error' ? 'assertive' : 'polite');
+    el.setAttribute('aria-atomic', 'true');
+
+    const flex = document.createElement('div');
+    flex.className = 'd-flex';
+
+    const body = document.createElement('div');
+    body.className = 'toast-body d-flex align-items-start gap-2';
+    const icono = document.createElement('i');
+    icono.className = `bi ${cfg.icono}`;
+    const texto = document.createElement('span');
+    texto.textContent = mensaje;
+    body.append(icono, texto);
+
+    const cerrar = document.createElement('button');
+    cerrar.type = 'button';
+    cerrar.className = 'btn-close btn-close-white me-2 m-auto';
+    cerrar.setAttribute('data-bs-dismiss', 'toast');
+    cerrar.setAttribute('aria-label', 'Cerrar');
+
+    flex.append(body, cerrar);
+    el.appendChild(flex);
+    document.getElementById('toastContainer').appendChild(el);
+
+    const toast = new bootstrap.Toast(el, { autohide: cfg.auto > 0, delay: cfg.auto });
+    el.addEventListener('hidden.bs.toast', () => el.remove());
+    toast.show();
+}
+
+// ============ MODAL VENTA EXITOSA ============
+// Bootstrap JS se carga al final de base.html: la instancia se crea al usarla, no aquí.
+const modalVentaEl = document.getElementById('modalVenta');
+const getModalVenta = () => bootstrap.Modal.getOrCreateInstance(modalVentaEl);
+
+function mostrarVentaExitosa(data) {
+    document.getElementById('mv_factura').textContent   = data.numero_factura;
+    document.getElementById('mv_total').textContent     = fmtUSD(data.total);
+    document.getElementById('mv_total_bs').textContent  = fmtBS(aBs(data.total));
+    document.getElementById('mv_ganancia').textContent  = fmtUSD(data.ganancia);
+    document.getElementById('mv_cambio').textContent    = fmtUSD(data.cambio);
+    document.getElementById('mv_cambio_bs').textContent = fmtBS(aBs(data.cambio));
+    getModalVenta().show();
+}
+
+document.getElementById('btnNuevaVenta').addEventListener('click', () => getModalVenta().hide());
+// Al cerrarse por cualquier vía (botón, ESC o clic fuera) el cursor vuelve al buscador
+modalVentaEl.addEventListener('hidden.bs.modal', () => document.getElementById('buscar').focus());
+
 // ============ TASA BCV ============
 const TASA_BCV = {{ tasa_bcv or 0 }};
 const fmtUSD = (n) => '$' + n.toFixed(2);
@@ -193,7 +314,7 @@ function agregarAlCarrito(prod) {
     const item = carrito.find(i => i.producto_id === prod.id);
     if (item) {
         if (item.cantidad + 1 > prod.stock_actual) {
-            alert('Stock insuficiente');
+            mostrarToast('Stock insuficiente', 'error');
             return;
         }
         item.cantidad++;
@@ -361,20 +482,20 @@ document.getElementById('metodo_pago').addEventListener('change', (e) => {
 
 // ============ COBRAR (con soporte offline) ============
 async function cobrar() {
-    if (carrito.length === 0) { alert('Carrito vacío'); return; }
+    if (carrito.length === 0) { mostrarToast('El carrito está vacío', 'error'); return; }
 
     const metodo = document.getElementById('metodo_pago').value;
     const totalUSD = obtenerTotalUSD();
     let pagos = [];
 
     if (metodo === 'mixto') {
-        if (pagosMixtos.length === 0) { alert('Agrega al menos un método de pago'); return; }
+        if (pagosMixtos.length === 0) { mostrarToast('Agrega al menos un método de pago', 'error'); return; }
         const suma = pagosMixtos.reduce((a, p) => {
             const m = p.monto || 0;
             return a + (p.moneda === 'BS' ? (m / TASA_BCV) : m);
         }, 0);
         if (suma < totalUSD - 0.01) {
-            alert(`Los pagos ($${suma.toFixed(2)}) no cubren el total ($${totalUSD.toFixed(2)})`);
+            mostrarToast(`Los pagos ($${suma.toFixed(2)}) no cubren el total ($${totalUSD.toFixed(2)})`, 'error');
             return;
         }
         pagos = pagosMixtos.map(p => ({
@@ -387,7 +508,7 @@ async function cobrar() {
         const montoUSD = (moneda === 'BS') ? (monto / TASA_BCV) : monto;
 
         if (montoUSD < totalUSD - 0.01) {
-            alert('Monto recibido insuficiente');
+            mostrarToast('Monto recibido insuficiente', 'error');
             return;
         }
         pagos = [{ metodo: metodo, monto: montoUSD }];
@@ -410,14 +531,9 @@ async function cobrar() {
 
         if (data.ok) {
             // ✅ Venta online exitosa
-            alert(
-                `✅ Venta ${data.numero_factura}\n` +
-                `Total: ${fmtUSD(data.total)} (${fmtBS(aBs(data.total))})\n` +
-                `Ganancia: ${fmtUSD(data.ganancia)}\n` +
-                `Cambio: ${fmtUSD(data.cambio)} (${fmtBS(aBs(data.cambio))})`
-            );
+            mostrarVentaExitosa(data);
         } else {
-            alert('❌ Error: ' + data.error);
+            mostrarToast('Error: ' + data.error, 'error');
             return;
         }
     } catch (err) {
@@ -426,14 +542,13 @@ async function cobrar() {
 
         if (window.VendiYA && window.VendiYA.guardarVentaPendiente) {
             await window.VendiYA.guardarVentaPendiente(ventaPayload);
-            alert(
-                `📡 SIN CONEXIÓN\n\n` +
-                `La venta se guardó localmente y se enviará automáticamente\n` +
-                `cuando vuelva la conexión a internet.\n\n` +
-                `Total: ${fmtUSD(totalUSD)} (${fmtBS(aBs(totalUSD))})`
+            mostrarToast(
+                `Sin conexión: la venta se guardó localmente y se enviará automáticamente ` +
+                `cuando vuelva internet. Total: ${fmtUSD(totalUSD)} (${fmtBS(aBs(totalUSD))})`,
+                'advertencia'
             );
         } else {
-            alert('❌ Sin conexión y el sistema offline no está listo. Intenta más tarde.');
+            mostrarToast('Sin conexión y el sistema offline no está listo. Intenta más tarde.', 'error');
             return;
         }
     }
